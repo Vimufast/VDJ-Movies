@@ -5,6 +5,12 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
+const LoadingScreen = () => (
+  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-100 z-50">
+    <img src="/images/VDJ LOADING.png" alt="Loading" className="w-full h-full object-contain" />
+  </div>
+);
+
 // --- Components ---
 
 const VideoPlayer = ({ movie, onClose, user }) => {
@@ -547,28 +553,6 @@ const DEFAULT_QUERIES = [
   "Best Horror Movies"
 ];
 
-const LoadingScreen = () => (
-  <div className="flex flex-col items-center justify-center min-h-[60vh] w-full p-8 animate-in fade-in duration-700">
-    <div className="relative w-48 h-48 md:w-64 md:h-64 mb-6">
-      {/* Mobile Loading Image */}
-      <img 
-        src="/images/VDJ LOADING.png" 
-        className="w-full h-full object-contain md:hidden animate-pulse" 
-        alt="Loading..." 
-      />
-      {/* Desktop Loading Image */}
-      <img 
-        src="/images/LOADING_PC.png" 
-        className="w-full h-full object-contain hidden md:block animate-pulse" 
-        alt="Loading..." 
-      />
-    </div>
-    <div className="w-32 h-1 bg-gray-800 rounded-full overflow-hidden relative">
-      <div className="absolute inset-0 bg-gold animate-shimmer" />
-    </div>
-    <p className="mt-4 text-[10px] font-black text-gold uppercase tracking-[0.3em] opacity-50">Syncing Archives...</p>
-  </div>
-);
 
 const HomeScreen = ({ onMovieClick }) => {
   const [movies, setMovies] = useState([]);
@@ -1420,8 +1404,14 @@ const App = () => {
   const [playingMovie, setPlayingMovie] = useState(null);
   const [user, setUser] = useState(null);
   const [isSideNavOpen, setIsSideNavOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Add isLoading state
 
   useEffect(() => {
+    // Simulate initial app loading
+    const appLoadTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000); // Show loading screen for 2 seconds
+
     const fetchUser = async () => {
       if (window.CoolzAuthClient) {
         try {
@@ -1441,7 +1431,10 @@ const App = () => {
     
     // Listen for storage changes (login/logout in other tabs)
     window.addEventListener('storage', fetchUser);
-    return () => window.removeEventListener('storage', fetchUser);
+    return () => {
+      clearTimeout(appLoadTimer); // Clear app load timer on unmount
+      window.removeEventListener('storage', fetchUser);
+    };
   }, []);
 
   const handleMovieClick = (movie) => {
@@ -1455,6 +1448,10 @@ const App = () => {
     setIsSheetOpen(false);
     setPlayingMovie(movie);
   };
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row max-w-md md:max-w-none mx-auto shadow-2xl relative bg-[#0f0f0f] overflow-hidden">

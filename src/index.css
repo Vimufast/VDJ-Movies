@@ -8,10 +8,25 @@
 
 body {
   margin: 0;
-  background-color: #0f0f0f;
+  background-color: #0f0f0f; /* Fallback for browsers that don't support background-image */
   color: white;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile background (default) */
+body {
+  background-image: url('/images/VDJ BACKGROUND.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+/* Desktop background */
+@media (min-width: 768px) {
+  body {
+    background-image: url('/images/BACKGROUND_PC.png');
+  }
 }
 
 /* Hide scrollbar for horizontal rails */
