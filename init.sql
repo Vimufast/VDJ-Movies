@@ -1,8 +1,6 @@
-
 -- If you are updating an existing database, run these individually in  SQL Editor:eg
 -- ALTER TABLE movies ADD COLUMN IF NOT EXISTS dj_name TEXT NOT NULL DEFAULT 'Unknown';
 -- ALTER TABLE movies ADD COLUMN IF NOT EXISTS summary TEXT;
--- ALTER TABLE movies ADD COLUMN IF NOT EXISTS telegram_thumbnail_id INTEGER NULL;
 CREATE TABLE IF NOT EXISTS heartbeats (
   id SERIAL PRIMARY KEY,
   ping_time timestamp with time zone DEFAULT NOW()
@@ -22,6 +20,16 @@ CREATE TABLE IF NOT EXISTS movies (
   genre text,
   publisher_name text,
   size text
+);
+CREATE TABLE IF NOT EXISTS thumbnails (
+  id SERIAL PRIMARY KEY,
+  movie_id INTEGER NOT NULL,
+  telegram_file_id INTEGER NOT NULL,
+  created_at timestamp with time zone DEFAULT NOW(),
+  CONSTRAINT fk_movie
+    FOREIGN KEY(movie_id)
+    REFERENCES movies(id)
+    ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,

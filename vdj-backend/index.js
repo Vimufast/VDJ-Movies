@@ -408,7 +408,9 @@ apiRouter.get('/upload', (req, res) => {
 // Get all movies grouped by genre
 apiRouter.get('/movies', async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM movies ORDER BY created_at DESC');
+        const result = await db.query(
+            'SELECT m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id ORDER BY m.created_at DESC'
+        );
         res.json(result.rows);
     } catch (error) {
         console.error(`[${new Date().toISOString()}] DB_ERROR:`, error);
@@ -419,7 +421,9 @@ apiRouter.get('/movies', async (req, res) => {
 // Get movies by publisher name
 apiRouter.get('/movies/publisher/:name', async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM movies WHERE publisher_name = $1 ORDER BY created_at DESC', [req.params.name]);
+        const result = await db.query(
+            'SELECT m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id WHERE m.publisher_name = $1 ORDER BY m.created_at DESC', [req.params.name]
+        );
         res.json(result.rows);
     } catch (error) {
         console.error(`[${new Date().toISOString()}] DB_ERROR:`, error);
@@ -460,29 +464,42 @@ apiRouter.get('/suggestions', async (req, res) => {
 apiRouter.delete('/movies/:id', async (req, res) => {
 
 // Stream Thumbnail Images from Cloud
-apiRouter.get('/thumbnail/:id', async (req, res) => {
-    const fileId = parseInt(req.params.id);
+apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
+    const movieId = parseInt(req.params.movie_id);
 
-    if (isNaN(fileId)) {
-        return res.status(400).json({ error: 'Invalid file ID' });
+    if (isNaN(movieId)) {
+        return res.status(400).json({ error: 'Invalid movie ID' });
     }
 
     try {
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_REQUEST: ID ${fileId}`);
-        
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_REQUEST for movie_id: ${movieId}`);
+
+        // Query the thumbnails table to get the telegram_file_id
+        const thumbnailResult = await db.query('SELECT telegram_file_id FROM thumbnails WHERE movie_id = $1', [movieId]);
+
+        if (thumbnailResult.rows.length === 0) {
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No thumbnail entry for movie_id ${movieId}`);
+            return res.status(404).json({ error: 'Thumbnail not found for this movie' });
+        }
+
+        const telegramFileId = thumbnailResult.rows[0].telegram_file_id;
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Retrieved telegram_file_id ${telegramFileId} for movie_id ${movieId}`);
+
         const activeClient = await ensureConnected();
         const entity = await getChannelEntity(activeClient);
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Attempting to get message for telegram_file_id ${telegramFileId} from channel entity ${entity.id}`);
 
         let message;
         try {
-            message = await activeClient.getMessages(entity, { ids: [fileId] });
+            message = await activeClient.getMessages(entity, { ids: [telegramFileId] });
+            console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: getMessages result: ${JSON.stringify(message)}`);
         } catch (msgErr) {
             console.error(`[${new Date().toISOString()}] THUMBNAIL_FETCH_ERROR:`, msgErr);
-            throw new Error(`Failed to fetch message ${fileId} from channel: ${msgErr.message}`);
+            throw new Error(`Failed to fetch message ${telegramFileId} from channel: ${msgErr.message}`);
         }
         
         if (!message || !message[0] || !message[0].media) {
-            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: ID ${fileId}`);
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: telegram_file_id ${telegramFileId} - Message or media not found. Message content: ${JSON.stringify(message)}`);
             return res.status(404).json({ error: 'Thumbnail not found in cloud storage' });
         }
 
@@ -689,10 +706,19 @@ apiRouter.post('/upload', upload.fields([
         }
 
         const result = await db.query(
-            'INSERT INTO movies (dj_name, title, summary, genre, telegram_link, telegram_message_id, publisher_name, size, thumbnail_url, telegram_thumbnail_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
-            [dj_name, title, summary, genre, storage_link, uploadedFile.id, publisher_name || 'Anonymous', sizeFormatted, null, telegramThumbnailId]
+            'INSERT INTO movies (dj_name, title, summary, genre, telegram_link, telegram_message_id, publisher_name, size) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+            [dj_name, title, summary, genre, storage_link, uploadedFile.id, publisher_name || 'Anonymous', sizeFormatted]
         );
-        
+        const movieId = result.rows[0].id;
+
+        // Insert thumbnail into the new thumbnails table if a cover was uploaded
+        if (telegramThumbnailId) {
+            await db.query(
+                'INSERT INTO thumbnails (movie_id, telegram_file_id) VALUES ($1, $2)',
+                [movieId, telegramThumbnailId]
+            );
+        }
+
         const totalDuration = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[${new Date().toISOString()}] TRANSACTION_COMPLETE: ${title} published in ${totalDuration}s total.`);
         
