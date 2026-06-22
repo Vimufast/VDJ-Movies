@@ -258,6 +258,86 @@ app.use((req, res, next) => {
 const apiRouter = express.Router();
 app.use('/api', apiRouter);
 
+// Stream Thumbnail Images from Cloud (Moved to a higher position)
+apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
+    const movieId = parseInt(req.params.movie_id);
+
+    if (isNaN(movieId)) {
+        return res.status(400).json({ error: 'Invalid movie ID' });
+    }
+
+    try {
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_REQUEST for movie_id: ${movieId}`);
+
+        // Query the thumbnails table to get the telegram_file_id
+        const thumbnailResult = await db.query('SELECT telegram_file_id FROM thumbnails WHERE movie_id = $1', [movieId]);
+
+        if (thumbnailResult.rows.length === 0) {
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No thumbnail entry for movie_id ${movieId}`);
+            return res.status(404).json({ error: 'Thumbnail not found for this movie' });
+        }
+
+        const telegramFileId = thumbnailResult.rows[0].telegram_file_id;
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Retrieved telegram_file_id ${telegramFileId} for movie_id ${movieId}`);
+
+        const activeClient = await ensureConnected();
+        const entity = await getChannelEntity(activeClient);
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Attempting to get message for telegram_file_id ${telegramFileId} from channel entity ${entity.id}`);
+
+        let message;
+        try {
+            message = await activeClient.getMessages(entity, { ids: [telegramFileId] });
+            console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: getMessages result: ${JSON.stringify(message)}`);
+        } catch (msgErr) {
+            console.error(`[${new Date().toISOString()}] THUMBNAIL_FETCH_ERROR:`, msgErr);
+            throw new Error(`Failed to fetch message ${telegramFileId} from channel: ${msgErr.message}`);
+        }
+        
+        if (!message || !message[0] || !message[0].media) {
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: telegram_file_id ${telegramFileId} - Message or media not found. Message content: ${JSON.stringify(message)}`);
+            return res.status(404).json({ error: 'Thumbnail not found in cloud storage' });
+        }
+
+        const media = message[0].media;
+        const document = media.document || media.photo;
+        
+        if (!document) {
+            return res.status(404).json({ error: 'No media found in message' });
+        }
+
+        const fileSize = BigInt(document.size);
+        const mimeType = media.document?.mimeType || 'image/jpeg'; // Assume JPEG if not specified
+
+        res.status(200).set({
+            'Content-Length': fileSize.toString(),
+            'Content-Type': mimeType,
+            'Cache-Control': 'public, max-age=31536000, immutable' // Cache for 1 year
+        });
+        
+        const stream = activeClient.iterDownload({
+            file: media,
+            offset: BigInt(0),
+            requestSize: 1024 * 1024,
+        });
+
+        for await (const chunk of stream) {
+            res.write(chunk);
+        }
+        res.end();
+
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] THUMBNAIL_CRITICAL_ERROR:`, error);
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                error: 'Failed to stream thumbnail', 
+                details: error.message,
+            });
+        } else {
+            res.end();
+        }
+    }
+});
+
 // --- Streaming Engine ---
 
 async function getChannelEntity(activeClient) {
@@ -462,87 +542,6 @@ apiRouter.get('/suggestions', async (req, res) => {
 
 // Delete a movie (only by owner)
 apiRouter.delete('/movies/:id', async (req, res) => {
-
-// Stream Thumbnail Images from Cloud
-apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
-    const movieId = parseInt(req.params.movie_id);
-
-    if (isNaN(movieId)) {
-        return res.status(400).json({ error: 'Invalid movie ID' });
-    }
-
-    try {
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_REQUEST for movie_id: ${movieId}`);
-
-        // Query the thumbnails table to get the telegram_file_id
-        const thumbnailResult = await db.query('SELECT telegram_file_id FROM thumbnails WHERE movie_id = $1', [movieId]);
-
-        if (thumbnailResult.rows.length === 0) {
-            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No thumbnail entry for movie_id ${movieId}`);
-            return res.status(404).json({ error: 'Thumbnail not found for this movie' });
-        }
-
-        const telegramFileId = thumbnailResult.rows[0].telegram_file_id;
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Retrieved telegram_file_id ${telegramFileId} for movie_id ${movieId}`);
-
-        const activeClient = await ensureConnected();
-        const entity = await getChannelEntity(activeClient);
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Attempting to get message for telegram_file_id ${telegramFileId} from channel entity ${entity.id}`);
-
-        let message;
-        try {
-            message = await activeClient.getMessages(entity, { ids: [telegramFileId] });
-            console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: getMessages result: ${JSON.stringify(message)}`);
-        } catch (msgErr) {
-            console.error(`[${new Date().toISOString()}] THUMBNAIL_FETCH_ERROR:`, msgErr);
-            throw new Error(`Failed to fetch message ${telegramFileId} from channel: ${msgErr.message}`);
-        }
-        
-        if (!message || !message[0] || !message[0].media) {
-            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: telegram_file_id ${telegramFileId} - Message or media not found. Message content: ${JSON.stringify(message)}`);
-            return res.status(404).json({ error: 'Thumbnail not found in cloud storage' });
-        }
-
-        const media = message[0].media;
-        const document = media.document || media.photo;
-        
-        if (!document) {
-            return res.status(404).json({ error: 'No media found in message' });
-        }
-
-        const fileSize = BigInt(document.size);
-        const mimeType = media.document?.mimeType || 'image/jpeg'; // Assume JPEG if not specified
-
-        res.status(200).set({
-            'Content-Length': fileSize.toString(),
-            'Content-Type': mimeType,
-            'Cache-Control': 'public, max-age=31536000, immutable' // Cache for 1 year
-        });
-        
-        const stream = activeClient.iterDownload({
-            file: media,
-            offset: BigInt(0),
-            requestSize: 1024 * 1024,
-        });
-
-        for await (const chunk of stream) {
-            res.write(chunk);
-        }
-        res.end();
-
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] THUMBNAIL_CRITICAL_ERROR:`, error);
-        if (!res.headersSent) {
-            res.status(500).json({ 
-                error: 'Failed to stream thumbnail', 
-                details: error.message,
-            });
-        } else {
-            res.end();
-        }
-    }
-});
-
 // Delete a movie (only by owner)
     const { publisher_name } = req.body;
     const movieId = req.params.id;
@@ -772,6 +771,12 @@ cron.schedule('0 0 * * *', async () => { // Runs daily at midnight UTC
     } catch (error) {
         console.error(`[${new Date().toISOString()}] HEARTBEAT_ERROR: Failed to ping database:`, error);
     }
+});
+
+// Catch-all for /api routes that don't exist
+apiRouter.use((req, res) => {
+    console.warn(`[${new Date().toISOString()}] API_404_FALLBACK: No route found for ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ error: 'API Endpoint Not Found', path: req.originalUrl });
 });
 
 app.listen(PORT, () => {
