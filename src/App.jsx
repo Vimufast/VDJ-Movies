@@ -6,8 +6,25 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
 const LoadingScreen = () => (
-  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-100 z-50">
-    <img src="/images/VDJ LOADING.png" alt="Loading" className="w-full h-full object-contain" />
+  <div className="fixed inset-0 flex flex-col items-center justify-center bg-black bg-opacity-100 z-50">
+    <div className="relative w-48 h-48 md:w-64 md:h-64 mb-6">
+      {/* Mobile Loading Image */}
+      <img 
+        src="/images/VDJ LOADING.png" 
+        className="w-full h-full object-contain md:hidden animate-pulse" 
+        alt="Loading..." 
+      />
+      {/* Desktop Loading Image */}
+      <img 
+        src="/images/LOADING_PC.png" 
+        className="w-full h-full object-contain hidden md:block animate-pulse" 
+        alt="Loading..." 
+      />
+    </div>
+    <div className="w-32 h-1 bg-gray-800 rounded-full overflow-hidden relative">
+      <div className="absolute inset-0 bg-gold animate-shimmer" />
+    </div>
+    <p className="mt-4 text-[10px] font-black text-gold uppercase tracking-[0.3em] opacity-50">Syncing Archives...</p>
   </div>
 );
 
@@ -1460,13 +1477,13 @@ const App = () => {
         {/* Mobile Background */}
         <img 
           src="/images/VDJ BACKGROUND.png" 
-          className="w-full h-full object-cover opacity-10 grayscale contrast-125 md:hidden" 
+          className="w-full h-full object-cover opacity-30 md:hidden" 
           alt="" 
         />
         {/* Desktop Background */}
         <img 
           src="/images/BACKGROUND_PC.png" 
-          className="w-full h-full object-cover opacity-5 grayscale contrast-150 hidden md:block" 
+          className="w-full h-full object-cover opacity-30 hidden md:block" 
           alt="" 
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/50 via-transparent to-[#0f0f0f]" />

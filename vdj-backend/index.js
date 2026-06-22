@@ -243,6 +243,11 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms'))
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
+// Add a simple health check for the root path
+app.get('/', (req, res) => {
+    res.status(200).send('VDJ Movies Backend is Live and Working!');
+});
+
 // Request logger for debugging
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Body keys: ${Object.keys(req.body)}`);
