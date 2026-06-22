@@ -458,6 +458,75 @@ apiRouter.get('/suggestions', async (req, res) => {
 
 // Delete a movie (only by owner)
 apiRouter.delete('/movies/:id', async (req, res) => {
+
+// Stream Thumbnail Images from Cloud
+apiRouter.get('/thumbnail/:id', async (req, res) => {
+    const fileId = parseInt(req.params.id);
+
+    if (isNaN(fileId)) {
+        return res.status(400).json({ error: 'Invalid file ID' });
+    }
+
+    try {
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_REQUEST: ID ${fileId}`);
+        
+        const activeClient = await ensureConnected();
+        const entity = await getChannelEntity(activeClient);
+
+        let message;
+        try {
+            message = await activeClient.getMessages(entity, { ids: [fileId] });
+        } catch (msgErr) {
+            console.error(`[${new Date().toISOString()}] THUMBNAIL_FETCH_ERROR:`, msgErr);
+            throw new Error(`Failed to fetch message ${fileId} from channel: ${msgErr.message}`);
+        }
+        
+        if (!message || !message[0] || !message[0].media) {
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: ID ${fileId}`);
+            return res.status(404).json({ error: 'Thumbnail not found in cloud storage' });
+        }
+
+        const media = message[0].media;
+        const document = media.document || media.photo;
+        
+        if (!document) {
+            return res.status(404).json({ error: 'No media found in message' });
+        }
+
+        const fileSize = BigInt(document.size);
+        const mimeType = media.document?.mimeType || 'image/jpeg'; // Assume JPEG if not specified
+
+        res.status(200).set({
+            'Content-Length': fileSize.toString(),
+            'Content-Type': mimeType,
+            'Cache-Control': 'public, max-age=31536000, immutable' // Cache for 1 year
+        });
+        
+        const stream = activeClient.iterDownload({
+            file: media,
+            offset: BigInt(0),
+            requestSize: 1024 * 1024,
+        });
+
+        for await (const chunk of stream) {
+            res.write(chunk);
+        }
+        res.end();
+
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] THUMBNAIL_CRITICAL_ERROR:`, error);
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                error: 'Failed to stream thumbnail', 
+                details: error.message,
+            });
+        } else {
+            res.end();
+        }
+    }
+});
+
+// Delete a movie (only by owner)
     const { publisher_name } = req.body;
     const movieId = req.params.id;
 
@@ -547,7 +616,7 @@ apiRouter.post('/upload', upload.fields([
         const activeClient = await ensureConnected();
         const entity = await getChannelEntity(activeClient);
         
-        let thumbnail_url = null;
+        let telegramThumbnailId = null; // Store Telegram message ID for thumbnail
 
         // 1. Process Cover Image if provided
         if (coverFile) {
@@ -568,8 +637,8 @@ apiRouter.post('/upload', upload.fields([
                 forceDocument: false
             });
             
-            thumbnail_url = `https://cloud-storage.vdj-movies.com/c/${channelId.replace('-100', '')}/${uploadedCover.id}`;
-            console.log(`[${new Date().toISOString()}] COVER_UPLOAD_SUCCESS: ${thumbnail_url}`);
+            telegramThumbnailId = uploadedCover.id; // Store the Telegram message ID
+            console.log(`[${new Date().toISOString()}] COVER_UPLOAD_SUCCESS: Telegram Message ID ${telegramThumbnailId}`);
             
             // Clean up cover temp file
             fs.unlink(coverFile.path, () => {});
@@ -620,8 +689,8 @@ apiRouter.post('/upload', upload.fields([
         }
 
         const result = await db.query(
-            'INSERT INTO movies (dj_name, title, summary, genre, telegram_link, telegram_message_id, publisher_name, size, thumbnail_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-            [dj_name, title, summary, genre, storage_link, uploadedFile.id, publisher_name || 'Anonymous', sizeFormatted, thumbnail_url]
+            'INSERT INTO movies (dj_name, title, summary, genre, telegram_link, telegram_message_id, publisher_name, size, thumbnail_url, telegram_thumbnail_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+            [dj_name, title, summary, genre, storage_link, uploadedFile.id, publisher_name || 'Anonymous', sizeFormatted, null, telegramThumbnailId]
         );
         
         const totalDuration = ((Date.now() - startTime) / 1000).toFixed(2);

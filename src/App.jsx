@@ -345,7 +345,7 @@ const MovieBottomSheet = ({ movie, isOpen, onClose, onPlay }) => {
         {/* Banner */}
         <div className="relative w-full aspect-video">
           <img 
-            src={movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/600/340`} 
+            src={movie.telegram_thumbnail_id ? `${API_BASE_URL}/thumbnail/${movie.telegram_thumbnail_id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/600/340`} 
             alt={movie.title}
             className="w-full h-full object-cover"
           />
@@ -486,7 +486,7 @@ const MovieCard = ({ movie, onClick }) => (
     onClick={() => onClick(movie)}
   >
     <img 
-      src={movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`} 
+      src={movie.telegram_thumbnail_id ? `${API_BASE_URL}/thumbnail/${movie.telegram_thumbnail_id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`} 
       alt={movie.title}
       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
     />
@@ -1348,7 +1348,7 @@ const ProfileScreen = ({ user, onMovieClick }) => {
 
                       <div className="aspect-[4/5] rounded-[1.5rem] overflow-hidden relative border border-white/5 shadow-xl bg-gray-900">
                       <img 
-                        src={movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/400/500`} 
+                        src={movie.telegram_thumbnail_id ? `${API_BASE_URL}/thumbnail/${movie.telegram_thumbnail_id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/400/500`} 
                         className="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500" 
                         alt={movie.title} 
                       />

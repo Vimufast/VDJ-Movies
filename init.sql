@@ -2,6 +2,7 @@
 -- If you are updating an existing database, run these individually in  SQL Editor:eg
 -- ALTER TABLE movies ADD COLUMN IF NOT EXISTS dj_name TEXT NOT NULL DEFAULT 'Unknown';
 -- ALTER TABLE movies ADD COLUMN IF NOT EXISTS summary TEXT;
+-- ALTER TABLE movies ADD COLUMN IF NOT EXISTS telegram_thumbnail_id INTEGER NULL;
 CREATE TABLE IF NOT EXISTS heartbeats (
   id SERIAL PRIMARY KEY,
   ping_time timestamp with time zone DEFAULT NOW()
