@@ -312,14 +312,18 @@ apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
             return res.status(404).json({ error: 'No media found in message' });
         }
 
-        const fileSize = BigInt(document.size);
         const mimeType = media.document?.mimeType || 'image/jpeg'; // Assume JPEG if not specified
 
         res.status(200).set({
-            'Content-Length': fileSize.toString(),
             'Content-Type': mimeType,
             'Cache-Control': 'public, max-age=31536000, immutable' // Cache for 1 year
         });
+
+        // Only set Content-Length if we know the size (for documents)
+        if (media.document && media.document.size) {
+            const fileSize = BigInt(media.document.size);
+            res.setHeader('Content-Length', fileSize.toString());
+        }
         
         const stream = activeClient.iterDownload({
             file: media,
