@@ -286,7 +286,8 @@ apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
 
         let message;
         try {
-            message = await activeClient.getMessages(entity, { ids: [telegramFileId] });
+            // Ensure telegramFileId is a BigInt, as GramJS expects BigInt for message IDs
+            message = await activeClient.getMessages(entity, { ids: [BigInt(telegramFileId)] });
             console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: getMessages result: ${JSON.stringify(message)}`);
         } catch (msgErr) {
             console.error(`[${new Date().toISOString()}] THUMBNAIL_FETCH_ERROR:`, msgErr);
