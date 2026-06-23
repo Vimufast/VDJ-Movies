@@ -272,8 +272,15 @@ apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
         // Query the thumbnails table to get the telegram_file_id
         const thumbnailResult = await db.query('SELECT telegram_file_id FROM thumbnails WHERE movie_id = $1', [movieId]);
 
-        if (thumbnailResult.rows.length === 0 || !telegramFileId) {
-            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No thumbnail entry or telegram_file_id for movie_id ${movieId}`);
+        if (thumbnailResult.rows.length === 0) {
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No thumbnail entry for movie_id ${movieId}`);
+            return res.status(404).json({ error: 'Thumbnail not found for this movie' });
+        }
+
+        const telegramFileId = thumbnailResult.rows[0].telegram_file_id;
+
+        if (!telegramFileId) {
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No telegram_file_id for movie_id ${movieId}`);
             return res.status(404).json({ error: 'Thumbnail not found for this movie' });
         }
 
