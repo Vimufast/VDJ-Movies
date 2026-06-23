@@ -1278,9 +1278,11 @@ const ProfileScreen = ({ user, onMovieClick }) => {
 
   return (
     <div className="pb-20 min-h-screen bg-[#0a0a0a]">
-      <div id="coolztech-auth-root">
-        {/* CoolzTech Shared UI mounts here for Login/Signup */}
-      </div>
+      {!user && (
+        <div id="coolztech-auth-root">
+          {/* CoolzTech Shared UI mounts here for Login/Signup */}
+        </div>
+      )}
 
       {user && (
         <div className="flex flex-col gap-8 animate-slide-up">
