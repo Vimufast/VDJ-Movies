@@ -1311,13 +1311,13 @@ const ProfileScreen = ({ user, onMovieClick }) => {
 
           {/* Stats Cards */}
           <div className="px-6 grid grid-cols-2 gap-4">
-            <div className="bg-[#121212] p-5 rounded-[2rem] border border-white/5 flex flex-col items-center justify-center text-center shadow-lg">
-              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Publications</p>
-              <p className="text-3xl font-black text-white">{userMovies.length}</p>
+            <div className="bg-[#121212] p-4 rounded-2xl border border-white/5 flex flex-col items-center justify-center text-center shadow-lg">
+              <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-1">Publications</p>
+              <p className="text-2xl font-black text-white">{userMovies.length}</p>
             </div>
-            <div className="bg-[#121212] p-5 rounded-[2rem] border border-white/5 flex flex-col items-center justify-center text-center shadow-lg">
-              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Total Reach</p>
-              <p className="text-3xl font-black text-gold">{totalViews.toLocaleString()}</p>
+            <div className="bg-[#121212] p-4 rounded-2xl border border-white/5 flex flex-col items-center justify-center text-center shadow-lg">
+              <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Reach</p>
+              <p className="text-2xl font-black text-gold">{totalViews.toLocaleString()}</p>
             </div>
           </div>
 
@@ -1392,7 +1392,7 @@ const ProfileScreen = ({ user, onMovieClick }) => {
 
           {/* Quick Actions / Settings */}
           <div className="px-6 flex flex-col gap-3 pb-10">
-            <button className="flex items-center justify-between p-5 bg-[#121212] rounded-[1.5rem] text-[11px] font-black text-gray-400 border border-white/5 hover:bg-[#1a1a1a] transition-all">
+            <button className="flex items-center justify-between p-4 bg-[#121212] rounded-2xl text-[11px] font-black text-gray-400 border border-white/5 hover:bg-[#1a1a1a] transition-all">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
                   <Settings size={18} />
@@ -1410,7 +1410,7 @@ const ProfileScreen = ({ user, onMovieClick }) => {
                   window.location.reload();
                 }
               }}
-              className="flex items-center justify-center p-5 bg-red-500/5 rounded-[1.5rem] text-[11px] font-black text-red-500 border border-red-500/10 active:bg-red-500/10 transition-all uppercase tracking-widest"
+              className="flex items-center justify-center p-4 bg-red-500/5 rounded-2xl text-[11px] font-black text-red-500 border border-red-500/10 active:bg-red-500/10 transition-all uppercase tracking-widest"
             >
               Terminate Session
             </button>
