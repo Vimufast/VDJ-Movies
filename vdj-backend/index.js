@@ -327,7 +327,6 @@ apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
         
         const stream = activeClient.iterDownload({
             file: media,
-            offset: BigInt(0),
             requestSize: 1024 * 1024,
         });
 
