@@ -284,17 +284,16 @@ apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
             return res.status(404).json({ error: 'Thumbnail not found for this movie' });
         }
 
-        const telegramFileIdBigInt = BigInt(telegramFileId);
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Retrieved telegram_file_id ${telegramFileIdBigInt} (BigInt) for movie_id ${movieId}`);
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Retrieved telegram_file_id ${telegramFileId} for movie_id ${movieId}`);
 
         const activeClient = await ensureConnected();
         const entity = await getChannelEntity(activeClient);
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Attempting to get message for telegram_file_id ${telegramFileIdBigInt} from channel entity ${entity.id}`);
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Attempting to get message for telegram_file_id ${telegramFileId} from channel entity ${entity.id}`);
 
         let message;
         try {
-            // Construct InputMessageID for getMessages
-            message = await activeClient.getMessages(entity, { ids: [new Api.InputMessageID({ id: telegramFileIdBigInt })] });
+            // Construct InputMessageID for getMessages - use regular number, not BigInt
+            message = await activeClient.getMessages(entity, { ids: [Number(telegramFileId)] });
             console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: getMessages result: ${JSON.stringify(message)}`);
         } catch (msgErr) {
             console.error(`[${new Date().toISOString()}] THUMBNAIL_FETCH_ERROR:`, msgErr);
