@@ -4,7 +4,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import db from './db.js';
 import multer from 'multer';
-import { TelegramClient } from "telegram";
+import { Api, TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -272,22 +272,22 @@ apiRouter.get('/thumbnail/:movie_id', async (req, res) => {
         // Query the thumbnails table to get the telegram_file_id
         const thumbnailResult = await db.query('SELECT telegram_file_id FROM thumbnails WHERE movie_id = $1', [movieId]);
 
-        if (thumbnailResult.rows.length === 0) {
-            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No thumbnail entry for movie_id ${movieId}`);
+        if (thumbnailResult.rows.length === 0 || !telegramFileId) {
+            console.warn(`[${new Date().toISOString()}] THUMBNAIL_NOT_FOUND: No thumbnail entry or telegram_file_id for movie_id ${movieId}`);
             return res.status(404).json({ error: 'Thumbnail not found for this movie' });
         }
 
-        const telegramFileId = thumbnailResult.rows[0].telegram_file_id;
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Retrieved telegram_file_id ${telegramFileId} for movie_id ${movieId}`);
+        const telegramFileIdBigInt = BigInt(telegramFileId);
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Retrieved telegram_file_id ${telegramFileIdBigInt} (BigInt) for movie_id ${movieId}`);
 
         const activeClient = await ensureConnected();
         const entity = await getChannelEntity(activeClient);
-        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Attempting to get message for telegram_file_id ${telegramFileId} from channel entity ${entity.id}`);
+        console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: Attempting to get message for telegram_file_id ${telegramFileIdBigInt} from channel entity ${entity.id}`);
 
         let message;
         try {
-            // Ensure telegramFileId is a BigInt, as GramJS expects BigInt for message IDs
-            message = await activeClient.getMessages(entity, { ids: [BigInt(telegramFileId)] });
+            // Construct InputMessageID for getMessages
+            message = await activeClient.getMessages(entity, { ids: [new Api.InputMessageID({ id: telegramFileIdBigInt })] });
             console.log(`[${new Date().toISOString()}] THUMBNAIL_DEBUG: getMessages result: ${JSON.stringify(message)}`);
         } catch (msgErr) {
             console.error(`[${new Date().toISOString()}] THUMBNAIL_FETCH_ERROR:`, msgErr);
