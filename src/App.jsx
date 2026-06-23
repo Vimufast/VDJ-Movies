@@ -1334,44 +1334,44 @@ const ProfileScreen = ({ user, onMovieClick }) => {
             {loading ? (
               <LoadingScreen />
             ) : userMovies.length > 0 ? (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {userMovies.map(movie => (
                   <div 
                       key={movie.id} 
-                      className="flex flex-col gap-3 group active:scale-95 transition-transform relative"
+                      className="flex flex-col gap-2 group active:scale-95 transition-transform relative"
                       onClick={() => onMovieClick(movie)}
                     >
                       {/* Delete Button Overlay */}
                       <button 
                         onClick={(e) => handleDelete(e, movie.id)}
                         disabled={deletingId === movie.id}
-                        className="absolute top-2 right-2 z-20 p-2 bg-red-600/90 text-white rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-red-700 active:scale-90"
+                        className="absolute top-2 right-2 z-20 p-1.5 bg-red-600/90 text-white rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-red-700 active:scale-90"
                       >
                         {deletingId === movie.id ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                         ) : (
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         )}
                       </button>
 
-                      <div className="aspect-[4/5] rounded-[1.5rem] overflow-hidden relative border border-white/5 shadow-xl bg-gray-900">
-                      <img 
-                        src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/400/500`} 
-                        className="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500" 
-                        alt={movie.title} 
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
-                      <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center">
-                        <div className="px-2 py-1 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 flex items-center gap-1">
-                          <Play size={10} className="text-gold" fill="currentColor" />
-                          <span className="text-[10px] font-black text-white">{movie.views}</span>
+                      <div className="aspect-[2/3] rounded-lg overflow-hidden relative border border-white/5 shadow-lg bg-gray-900">
+                        <img 
+                          src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`} 
+                          className="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500 group-hover:scale-110" 
+                          alt={movie.title} 
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+                        <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center">
+                          <div className="px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded-md border border-white/10 flex items-center gap-1">
+                            <Play size={8} className="text-gold" fill="currentColor" />
+                            <span className="text-[9px] font-black text-white">{movie.views}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="px-1">
-                      <p className="text-xs font-black text-white truncate uppercase tracking-tight">{movie.title}</p>
-                      <p className="text-[8px] text-gray-500 font-black mt-0.5 uppercase tracking-widest">{movie.genre}</p>
-                    </div>
+                      <div className="px-0.5">
+                        <p className="text-[10px] font-black text-white truncate uppercase tracking-tight">{movie.title}</p>
+                        <p className="text-[7px] text-gray-500 font-black mt-0.5 uppercase tracking-widest">{movie.genre}</p>
+                      </div>
                   </div>
                 ))}
               </div>
