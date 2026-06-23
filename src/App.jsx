@@ -1224,19 +1224,16 @@ const ProfileScreen = ({ user, onMovieClick }) => {
   const [userMovies, setUserMovies] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [showMenu, setShowMenu] = useState(false);
-  const [activeProfile, setActiveProfile] = useState('vdj'); // 'vdj' or 'coolztech'
 
   useEffect(() => {
-    // Only mount CoolzTech Shared UI if user is NOT logged in OR we're on coolztech profile
-    if (!user || activeProfile === 'coolztech') {
-      if (window.ctMount) {
-        window.ctMount('#coolztech-auth-root', {
-          baseUrl: 'https://authcoolztech.vercel.app'
-        });
-      }
+    // Only mount CoolzTech Shared UI if user is NOT logged in
+    // This prevents the "client.getSessions is not a function" error
+    if (!user && window.ctMount) {
+      window.ctMount('#coolztech-auth-root', {
+        baseUrl: 'https://authcoolztech.vercel.app'
+      });
     }
-  }, [user, activeProfile]);
+  }, [user]);
 
   const fetchUserMovies = async () => {
     if (!user) return;
@@ -1280,56 +1277,12 @@ const ProfileScreen = ({ user, onMovieClick }) => {
   const totalViews = userMovies.reduce((acc, movie) => acc + (movie.views || 0), 0);
 
   return (
-    <div className="pb-20 min-h-screen bg-[#0a0a0a] relative">
-      {/* Menu Dropdown */}
-      {showMenu && (
-        <div 
-          className="fixed inset-0 z-50" 
-          onClick={() => setShowMenu(false)}
-        >
-          <div 
-            className="absolute top-16 right-6 bg-[#121212] rounded-2xl border border-white/10 shadow-2xl overflow-hidden w-64"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => {
-                setActiveProfile('vdj');
-                setShowMenu(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-4 text-left transition-all ${activeProfile === 'vdj' ? 'bg-gold/10 text-gold' : 'text-gray-300 hover:bg-white/5'}`}
-            >
-              <div className="w-8 h-8 rounded-xl bg-gold/10 flex items-center justify-center">
-                <Play size={16} fill="currentColor" />
-              </div>
-              <div className="flex-1">
-                <p className="font-black text-xs uppercase tracking-wider">VDJ-MOVIES Profile</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">Your publisher dashboard</p>
-              </div>
-              {activeProfile === 'vdj' && <CheckCircle2 size={16} />}
-            </button>
-            <div className="h-px bg-white/10" />
-            <button
-              onClick={() => {
-                setActiveProfile('coolztech');
-                setShowMenu(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-4 text-left transition-all ${activeProfile === 'coolztech' ? 'bg-blue-500/10 text-blue-500' : 'text-gray-300 hover:bg-white/5'}`}
-            >
-              <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                <Settings size={16} />
-              </div>
-              <div className="flex-1">
-                <p className="font-black text-xs uppercase tracking-wider">Manage CoolzTech Account</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">Account settings & security</p>
-              </div>
-              {activeProfile === 'coolztech' && <CheckCircle2 size={16} />}
-            </button>
-          </div>
-        </div>
-      )}
+    <div className="pb-20 min-h-screen bg-[#0a0a0a]">
+      <div id="coolztech-auth-root">
+        {/* CoolzTech Shared UI mounts here for Login/Signup */}
+      </div>
 
-      {/* VDJ-MOVIES Profile View */}
-      {activeProfile === 'vdj' && user && (
+      {user && (
         <div className="flex flex-col gap-8 animate-slide-up">
           {/* Hero Profile Header */}
           <div className="relative h-64 flex items-end px-6 pb-6">
@@ -1353,13 +1306,6 @@ const ProfileScreen = ({ user, onMovieClick }) => {
                   Official VDJ Publisher
                 </p>
               </div>
-              {/* Hamburger Menu Button */}
-              <button 
-                onClick={() => setShowMenu(!showMenu)}
-                className="p-3 bg-[#1e1e1e] rounded-2xl border border-white/10 text-white hover:bg-white/5 transition-all"
-              >
-                <Menu size={24} />
-              </button>
             </div>
           </div>
 
@@ -1468,39 +1414,6 @@ const ProfileScreen = ({ user, onMovieClick }) => {
             >
               Terminate Session
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* CoolzTech Account View */}
-      {activeProfile === 'coolztech' && (
-        <div className="flex flex-col gap-8 animate-slide-up px-6 pt-8">
-          {/* Header for CoolzTech Account */}
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setActiveProfile('vdj')}
-              className="p-3 bg-[#121212] rounded-2xl border border-white/10 text-white hover:bg-white/5 transition-all"
-            >
-              <ChevronRight size={24} className="rotate-180" />
-            </button>
-            <div>
-              <h2 className="font-black text-2xl text-white tracking-tight uppercase">CoolzTech Account</h2>
-              <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Manage your global account settings</p>
-            </div>
-          </div>
-
-          {/* CoolzTech Auth UI Mount */}
-          <div id="coolztech-auth-root">
-            {/* CoolzTech Shared UI mounts here */}
-          </div>
-        </div>
-      )}
-
-      {/* Not Logged In View */}
-      {!user && activeProfile === 'vdj' && (
-        <div className="p-6">
-          <div id="coolztech-auth-root">
-            {/* CoolzTech Shared UI mounts here for Login/Signup */}
           </div>
         </div>
       )}
