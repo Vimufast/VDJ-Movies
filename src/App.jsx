@@ -1814,12 +1814,16 @@ const ProfileScreen = ({ user, onMovieClick }) => {
   const [activeTab, setActiveTab] = useState('single'); // 'single' or 'packs'
 
   useEffect(() => {
-    // Only mount CoolzTech Shared UI if user is NOT logged in
-    // This prevents the "client.getSessions is not a function" error
+    const authRoot = document.getElementById('coolztech-auth-root');
+    
     if (!user && window.ctMount) {
+      // Mount auth UI if user is not logged in
       window.ctMount('#coolztech-auth-root', {
         baseUrl: 'https://authcoolztech.vercel.app'
       });
+    } else if (authRoot) {
+      // Clear auth UI if user IS logged in
+      authRoot.innerHTML = '';
     }
   }, [user]);
 
