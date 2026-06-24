@@ -719,7 +719,7 @@ const HomeScreen = ({ onMovieClick, onSeriesClick }) => {
 
   const getMoviesByGenre = (genre) => {
     if (!Array.isArray(filteredMovies)) return [];
-    return filteredMovies.filter(m => m.genre === genre);
+    return filteredMovies.filter(m => m.genre === genre && (!m.series_titles || m.series_titles.length === 0));
   };
 
   const handleSuggestionClick = (query) => {
@@ -835,7 +835,7 @@ const HomeScreen = ({ onMovieClick, onSeriesClick }) => {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-black text-gray-500 uppercase tracking-widest">
-                    {searchQuery ? `Search Results (${filteredMovies.length})` : `${selectedGenre} (${filteredMovies.length})`}
+                    {searchQuery ? `Search Results (${filteredMovies.filter(m => !m.series_titles || m.series_titles.length === 0).length})` : `${selectedGenre} (${filteredMovies.filter(m => !m.series_titles || m.series_titles.length === 0).length})`}
                   </h2>
                   {searchQuery && (
                     <button onClick={() => setSearchQuery('')} className="text-[10px] font-black text-gold uppercase tracking-widest">Clear</button>
@@ -849,7 +849,7 @@ const HomeScreen = ({ onMovieClick, onSeriesClick }) => {
                 )}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {filteredMovies.map(movie => (
+                {filteredMovies.filter(m => !m.series_titles || m.series_titles.length === 0).map(movie => (
                   <MovieCard key={movie.id} movie={movie} onClick={onMovieClick} />
                 ))}
               </div>
@@ -1814,7 +1814,7 @@ const DJProfileScreen = ({ user, onMovieClick, onSeriesClick }) => {
         ) : (
           movies.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {movies.map(movie => (
+              {movies.filter(movie => (!movie.series_titles || movie.series_titles.length === 0)).map(movie => (
                 <div 
                   key={movie.id} 
                   className="flex flex-col gap-2 cursor-pointer"
@@ -2004,7 +2004,7 @@ const ProfileScreen = ({ user, onMovieClick, onSeriesClick }) => {
               <LoadingScreen />
             ) : activeTab === 'single' && userMovies.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {userMovies.map(movie => (
+                {userMovies.filter(movie => (!movie.series_titles || movie.series_titles.length === 0)).map(movie => (
                   <div 
                       key={movie.id} 
                       className="flex flex-col gap-2 group active:scale-95 transition-transform relative"
