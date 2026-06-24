@@ -584,13 +584,62 @@ apiRouter.get('/djs', async (req, res) => {
   }
 });
 
+// --- User Sync API Route ---
+// Sync CoolzAuth user to our local database
+apiRouter.post('/users/sync', async (req, res) => {
+    const { id, username, email, avatar_url, phone_number } = req.body;
+
+    if (!id || !username || !email) {
+        return res.status(400).json({ error: 'Missing required user fields' });
+    }
+
+    try {
+        // Check if user already exists
+        const existingUser = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+        
+        if (existingUser.rows.length > 0) {
+            // Update existing user
+            const updateResult = await db.query(
+                'UPDATE users SET username = $1, email = $2, avatar_url = $3, phone_number = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
+                [username, email, avatar_url, phone_number, id]
+            );
+            return res.json(updateResult.rows[0]);
+        }
+
+        // Insert new user
+        const insertResult = await db.query(
+            'INSERT INTO users (id, username, email, avatar_url, phone_number) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [id, username, email, avatar_url, phone_number]
+        );
+        console.log(`[${new Date().toISOString()}] NEW_USER_SYNCED: ${username} (ID: ${id})`);
+        res.json(insertResult.rows[0]);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] USER_SYNC_ERROR:`, error);
+        res.status(500).json({ error: 'Failed to sync user', details: error.message });
+    }
+});
+
 // --- Series (Packs) API Routes ---
 
 // Create a new series (pack)
 apiRouter.post('/series', async (req, res) => {
   const { title, description, user_id, dj_name } = req.body;
   
+  if (!user_id) {
+    return res.status(401).json({ error: 'Unauthorized: You must be logged in to create a pack' });
+  }
+  
+  if (!title || !dj_name) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  
   try {
+    // Verify user exists
+    const userCheck = await db.query('SELECT id FROM users WHERE id = $1', [user_id]);
+    if (userCheck.rows.length === 0) {
+      return res.status(401).json({ error: 'Unauthorized: User not found' });
+    }
+
     // Get or create DJ
     let djResult = await db.query('SELECT id FROM djs WHERE name = $1', [dj_name]);
     if (djResult.rows.length === 0) {
@@ -603,6 +652,7 @@ apiRouter.post('/series', async (req, res) => {
       'INSERT INTO series (title, description, user_id, dj_id) VALUES ($1, $2, $3, $4) RETURNING *',
       [title, description, user_id, dj_id]
     );
+    console.log(`[${new Date().toISOString()}] PACK_CREATED: ${title} by user ${user_id}`);
     res.json(result.rows[0]);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] CREATE_SERIES_ERROR:`, error);

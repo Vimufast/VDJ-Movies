@@ -32,10 +32,12 @@ CREATE TABLE IF NOT EXISTS thumbnails (
     ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY,
   username text NOT NULL UNIQUE,
   email text NOT NULL UNIQUE,
-  password_hash text NOT NULL,
+  password_hash text,
+  avatar_url text,
+  phone_number text,
   created_at timestamp with time zone DEFAULT NOW(),
   updated_at timestamp with time zone DEFAULT NOW(),
   is_dj_manager boolean DEFAULT false

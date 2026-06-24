@@ -1163,7 +1163,7 @@ const UploadScreen = ({ user }) => {
           const seriesResponse = await axios.post(`${API_BASE_URL}/series`, {
             title: newSeriesTitle,
             description: newSeriesDescription,
-            user_id: 1, // Placeholder
+            user_id: user.id, // Use user.id from CoolzAuth
             dj_name: formData.dj_name
           });
           seriesIdToUse = seriesResponse.data.id;
@@ -1653,9 +1653,11 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
           const moviesResponse = await axios.get(`${API_BASE_URL}/djs/${djResponse.data.id}/movies?sort=${sort}`);
           setMovies(Array.isArray(moviesResponse.data) ? moviesResponse.data : []);
         } else if (activeTab === 'packs') {
-          // Fetch packs/series for this DJ
-          const packsResponse = await axios.get(`${API_BASE_URL}/series/user/1`); // Placeholder user ID
-          setPacks(Array.isArray(packsResponse.data) ? packsResponse.data : []);
+          // Fetch packs/series for this user
+          if (user?.id) {
+            const packsResponse = await axios.get(`${API_BASE_URL}/series/user/${user.id}`);
+            setPacks(Array.isArray(packsResponse.data) ? packsResponse.data : []);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch DJ profile:", err);
@@ -1835,11 +1837,10 @@ const ProfileScreen = ({ user, onMovieClick }) => {
   };
 
   const fetchUserSeries = async () => {
-    if (!user) return;
+    if (!user || !user.id) return;
     try {
-      // In a real app, we'd get user ID from user object
-      // For now, let's just initialize as empty
-      setUserSeries([]);
+      const response = await axios.get(`${API_BASE_URL}/series/user/${user.id}`);
+      setUserSeries(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error("Failed to fetch user series:", err);
     }
@@ -2097,9 +2098,19 @@ const App = () => {
             baseUrl: 'https://authcoolztech.vercel.app' 
           });
           const profile = await client.getProfile();
+          
+          // Sync user with our backend
+          await axios.post(`${API_BASE_URL}/users/sync`, {
+            id: profile.id,
+            username: profile.username,
+            email: profile.email,
+            avatar_url: profile.avatar_url,
+            phone_number: profile.phone_number
+          });
+          
           setUser(profile);
         } catch (err) {
-          console.warn("User not logged in or session expired");
+          console.warn("User not logged in or session expired", err);
         }
       }
     };
