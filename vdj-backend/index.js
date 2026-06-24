@@ -594,6 +594,8 @@ apiRouter.post('/users/sync', async (req, res) => {
     }
 
     try {
+        console.log(`[${new Date().toISOString()}] USER_SYNC_ATTEMPT: ID ${id}, Username ${username}`);
+        
         // Check if user already exists
         const existingUser = await db.query('SELECT * FROM users WHERE id = $1', [id]);
         
@@ -603,19 +605,33 @@ apiRouter.post('/users/sync', async (req, res) => {
                 'UPDATE users SET username = $1, email = $2, avatar_url = $3, phone_number = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
                 [username, email, avatar_url, phone_number, id]
             );
+            console.log(`[${new Date().toISOString()}] USER_UPDATED: ${username} (ID: ${id})`);
             return res.json(updateResult.rows[0]);
         }
 
-        // Insert new user
+        // Insert new user - handle both serial and non-serial id columns
         const insertResult = await db.query(
-            'INSERT INTO users (id, username, email, avatar_url, phone_number) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            `INSERT INTO users (id, username, email, avatar_url, phone_number, password_hash) 
+             VALUES ($1, $2, $3, $4, $5, NULL) 
+             ON CONFLICT (id) DO UPDATE SET
+             username = EXCLUDED.username,
+             email = EXCLUDED.email,
+             avatar_url = EXCLUDED.avatar_url,
+             phone_number = EXCLUDED.phone_number,
+             updated_at = NOW()
+             RETURNING *`,
             [id, username, email, avatar_url, phone_number]
         );
         console.log(`[${new Date().toISOString()}] NEW_USER_SYNCED: ${username} (ID: ${id})`);
         res.json(insertResult.rows[0]);
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] USER_SYNC_ERROR:`, error);
-        res.status(500).json({ error: 'Failed to sync user', details: error.message });
+        console.error(`[${new Date().toISOString()}] USER_SYNC_ERROR:`, error.message);
+        console.error('Stack trace:', error.stack);
+        res.status(500).json({ 
+            error: 'Failed to sync user', 
+            details: error.message,
+            hint: 'Make sure you have applied the ALTER TABLE commands to update your users table!'
+        });
     }
 });
 

@@ -2103,14 +2103,19 @@ const App = () => {
           });
           const profile = await client.getProfile();
           
-          // Sync user with our backend
-          await axios.post(`${API_BASE_URL}/users/sync`, {
-            id: profile.id,
-            username: profile.username,
-            email: profile.email,
-            avatar_url: profile.avatar_url,
-            phone_number: profile.phone_number
-          });
+          // Try to sync user with our backend, but don't fail the whole login if sync fails
+          try {
+            await axios.post(`${API_BASE_URL}/users/sync`, {
+              id: profile.id,
+              username: profile.username,
+              email: profile.email,
+              avatar_url: profile.avatar_url,
+              phone_number: profile.phone_number
+            });
+            console.log("User synced successfully with backend");
+          } catch (syncErr) {
+            console.warn("User sync failed, but user is still logged in", syncErr);
+          }
           
           setUser(profile);
         } catch (err) {
