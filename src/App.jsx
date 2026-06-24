@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Home, Library, Upload, User, Search, Play, X, CheckCircle2, DownloadCloud, ChevronRight, AlertTriangle, Settings, Pause, Maximize, Minimize, Trash2, Image as ImageIcon, TrendingUp, Menu } from 'lucide-react';
+import { Home, Library, Upload, User, Search, Play, X, CheckCircle2, DownloadCloud, ChevronRight, AlertTriangle, Settings, Pause, Maximize, Minimize, Trash2, Image as ImageIcon, TrendingUp, Menu, Clock, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
@@ -922,11 +922,13 @@ const LibraryScreen = () => {
 const UploadScreen = ({ user }) => {
   const [formData, setFormData] = useState({
     dj_name: '',
-    title: '',
     summary: '',
     genre: 'Action'
   });
   const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]); // For bulk upload
+  const [uploadQueue, setUploadQueue] = useState([]); // Queue of files to upload
+  const [currentUploadIndex, setCurrentUploadIndex] = useState(0); // Which file is uploading
   const [coverImage, setCoverImage] = useState(null);
   const [coverPreview, setCoverPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -939,6 +941,7 @@ const UploadScreen = ({ user }) => {
   const [userSeries, setUserSeries] = useState([]);
   const [newSeriesTitle, setNewSeriesTitle] = useState('');
   const [newSeriesDescription, setNewSeriesDescription] = useState('');
+  const [createdSeriesId, setCreatedSeriesId] = useState(null); // Track created pack
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -966,17 +969,45 @@ const UploadScreen = ({ user }) => {
     ? Math.floor(progress / 2) 
     : 50 + Math.floor(cloudProgress / 2);
 
+  // Total progress for bulk upload
+  const totalProgress = uploadQueue.length > 0 
+    ? Math.round(((currentUploadIndex + (progress / 200)) / uploadQueue.length) * 100)
+    : 0;
+
   const handleFileChange = (e) => {
-     const selectedFile = e.target.files[0];
-     if (selectedFile) {
-       if (selectedFile.size > 2000 * 1024 * 1024) {
-         setError("File is too large (Max 2GB). Please compress the movie or use a smaller file.");
-         setFile(null);
-         setVideoUrl(null);
-       } else {
+     if (uploadType === 'pack') {
+       const selectedFiles = Array.from(e.target.files);
+       const validFiles = selectedFiles.filter(f => {
+         if (f.size > 2000 * 1024 * 1024) {
+           setError(`${f.name} is too large (Max 2GB).`);
+           return false;
+         }
+         return true;
+       });
+       
+       if (validFiles.length > 0) {
+         setFiles(validFiles);
+         setUploadQueue(validFiles.map((f, idx) => ({
+           id: Date.now() + idx,
+           file: f,
+           status: 'waiting', // waiting, uploading, completed, error
+           progress: 0,
+           title: f.name.replace(/\.[^/.]+$/, "")
+         })));
          setError(null);
-         setFile(selectedFile);
-         setVideoUrl(URL.createObjectURL(selectedFile));
+       }
+     } else {
+       const selectedFile = e.target.files[0];
+       if (selectedFile) {
+         if (selectedFile.size > 2000 * 1024 * 1024) {
+           setError("File is too large (Max 2GB). Please compress the movie or use a smaller file.");
+           setFile(null);
+           setVideoUrl(null);
+         } else {
+           setError(null);
+           setFile(selectedFile);
+           setVideoUrl(URL.createObjectURL(selectedFile));
+         }
        }
      }
    };
@@ -1010,70 +1041,202 @@ const UploadScreen = ({ user }) => {
     }
   };
 
+  // Upload a single file
+  const uploadSingleFile = async (queueItem, seriesId = null) => {
+    return new Promise(async (resolve, reject) => {
+      let cloudInterval = null;
+      
+      try {
+        const data = new FormData();
+        data.append('dj_name', formData.dj_name);
+        data.append('title', queueItem.title);
+        data.append('summary', formData.summary);
+        data.append('genre', formData.genre);
+        data.append('movie_file', queueItem.file);
+        data.append('publisher_name', user.username);
+
+        setProgress(0);
+        setCloudProgress(0);
+
+        const response = await axios.post(`${API_BASE_URL}/upload`, data, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 600000, 
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setProgress(percentCompleted);
+            
+            // Update queue item progress
+            setUploadQueue(prev => prev.map(item => 
+              item.id === queueItem.id 
+                ? { ...item, progress: percentCompleted, status: 'uploading' }
+                : item
+            ));
+
+            if (percentCompleted === 100 && !cloudInterval) {
+              cloudInterval = setInterval(() => {
+                setCloudProgress(prev => {
+                  if (prev >= 98) return 98;
+                  return prev + 1;
+                });
+              }, 1500); 
+            }
+          }
+        });
+
+        if (cloudInterval) clearInterval(cloudInterval);
+        setCloudProgress(100);
+
+        // If we have a series, add this movie to it
+        if (seriesId && response.data.success) {
+          const movieId = response.data.movie?.id;
+          if (movieId) {
+            await axios.post(`${API_BASE_URL}/series/${seriesId}/movies`, {
+              movie_id: movieId
+            });
+          }
+        }
+
+        setUploadQueue(prev => prev.map(item => 
+          item.id === queueItem.id 
+            ? { ...item, status: 'completed', progress: 100 }
+            : item
+        ));
+
+        resolve(response.data);
+      } catch (error) {
+        if (cloudInterval) clearInterval(cloudInterval);
+        setUploadQueue(prev => prev.map(item => 
+          item.id === queueItem.id 
+            ? { ...item, status: 'error' }
+            : item
+        ));
+        reject(error);
+      }
+    });
+  };
+
+  // Process the upload queue
+  const processUploadQueue = async (seriesId) => {
+    setUploading(true);
+    
+    for (let i = 0; i < uploadQueue.length; i++) {
+      setCurrentUploadIndex(i);
+      try {
+        await uploadSingleFile(uploadQueue[i], seriesId);
+      } catch (error) {
+        console.error('Upload failed:', error);
+        setError(`Failed to upload ${uploadQueue[i].title}`);
+      }
+      // Small delay between uploads
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    setUploading(false);
+    window.location.href = '/'; 
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file) return;
-
+    
     if (!user) {
       setError("You must be logged in to publish movies.");
       return;
     }
 
     setError(null);
-    const data = new FormData();
-    data.append('dj_name', formData.dj_name);
-    data.append('title', formData.title);
-    data.append('summary', formData.summary);
-    data.append('genre', formData.genre);
-    data.append('movie_file', file);
-    if (coverImage) {
-      data.append('cover_image', coverImage);
-    }
-    data.append('publisher_name', user.username);
-
-    setUploading(true);
-    setProgress(0);
-    setCloudProgress(0);
-
-    let cloudInterval = null;
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/upload`, data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 600000, 
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setProgress(percentCompleted);
-
-          if (percentCompleted === 100 && !cloudInterval) {
-            cloudInterval = setInterval(() => {
-              setCloudProgress(prev => {
-                if (prev >= 98) return 98;
-                return prev + 1;
-              });
-            }, 1500); 
+    
+    if (uploadType === 'pack' && uploadQueue.length > 0) {
+      // Pack upload
+      try {
+        setUploading(true);
+        
+        let seriesIdToUse = selectedSeries?.id;
+        
+        // Create new series if needed
+        if (!seriesIdToUse) {
+          if (!newSeriesTitle.trim()) {
+            setError("Please enter a pack title.");
+            setUploading(false);
+            return;
           }
+          
+          const seriesResponse = await axios.post(`${API_BASE_URL}/series`, {
+            title: newSeriesTitle,
+            description: newSeriesDescription,
+            user_id: 1, // Placeholder
+            dj_name: formData.dj_name
+          });
+          seriesIdToUse = seriesResponse.data.id;
+          setCreatedSeriesId(seriesIdToUse);
         }
-      });
-
-      if (response.data.success) {
-        if (cloudInterval) clearInterval(cloudInterval);
-        setCloudProgress(100);
-        setFormData({ dj_name: '', title: '', summary: '', genre: 'Action' });
-        setFile(null);
-        setCoverImage(null);
-        setCoverPreview(null);
-        setVideoUrl(null);
-        setProgress(0);
-        window.location.href = '/'; 
+        
+        // Start processing queue
+        await processUploadQueue(seriesIdToUse);
+        
+      } catch (error) {
+        console.error('Pack upload failed:', error);
+        setUploading(false);
+        setError(error.response?.data?.details || "Failed to create pack.");
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      setUploading(false);
-      setProgress(0);
-      setError(error.response?.data?.details || "Upload failed. Please try again.");
-    } finally {
-      setUploading(false);
+    } else {
+      // Single upload
+      if (!file) return;
+      
+      let cloudInterval = null;
+      
+      try {
+        const data = new FormData();
+        data.append('dj_name', formData.dj_name);
+        data.append('title', formData.title);
+        data.append('summary', formData.summary);
+        data.append('genre', formData.genre);
+        data.append('movie_file', file);
+        if (coverImage) {
+          data.append('cover_image', coverImage);
+        }
+        data.append('publisher_name', user.username);
+
+        setUploading(true);
+        setProgress(0);
+        setCloudProgress(0);
+
+        const response = await axios.post(`${API_BASE_URL}/upload`, data, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 600000, 
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setProgress(percentCompleted);
+
+            if (percentCompleted === 100 && !cloudInterval) {
+              cloudInterval = setInterval(() => {
+                setCloudProgress(prev => {
+                  if (prev >= 98) return 98;
+                  return prev + 1;
+                });
+              }, 1500); 
+            }
+          }
+        });
+
+        if (response.data.success) {
+          if (cloudInterval) clearInterval(cloudInterval);
+          setCloudProgress(100);
+          setFormData({ dj_name: '', summary: '', genre: 'Action' });
+          setFile(null);
+          setCoverImage(null);
+          setCoverPreview(null);
+          setVideoUrl(null);
+          setProgress(0);
+          window.location.href = '/'; 
+        }
+      } catch (error) {
+        console.error('Upload failed:', error);
+        setUploading(false);
+        setProgress(0);
+        setError(error.response?.data?.details || "Upload failed. Please try again.");
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
@@ -1182,24 +1345,28 @@ const UploadScreen = ({ user }) => {
           />
         </div>
         
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Movie Title</label>
-          <input 
-            type="text" 
-            placeholder="e.g., Transporter 3"
-            className="bg-[#1e1e1e] border-none rounded-xl p-4 text-sm focus:ring-1 focus:ring-gold outline-none"
-            value={formData.title}
-            onChange={(e) => setFormData({...formData, title: e.target.value})}
-            required
-            disabled={uploading}
-          />
-        </div>
+        {uploadType === 'single' && (
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Movie Title</label>
+            <input 
+              type="text" 
+              placeholder="e.g., Transporter 3"
+              className="bg-[#1e1e1e] border-none rounded-xl p-4 text-sm focus:ring-1 focus:ring-gold outline-none"
+              value={formData.title}
+              onChange={(e) => setFormData({...formData, title: e.target.value})}
+              required
+              disabled={uploading}
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Summary of the Movie</label>
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+            {uploadType === 'single' ? 'Summary of the Movie' : 'Description for Pack'}
+          </label>
           <textarea 
             rows={3}
-            placeholder="A short, catchy description..."
+            placeholder={uploadType === 'single' ? "A short, catchy description..." : "Describe what this pack contains..."}
             className="bg-[#1e1e1e] border-none rounded-xl p-4 text-sm focus:ring-1 focus:ring-gold resize-none outline-none"
             value={formData.summary}
             onChange={(e) => setFormData({...formData, summary: e.target.value})}
@@ -1219,119 +1386,203 @@ const UploadScreen = ({ user }) => {
           </select>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Movie File (Direct Uplift)</label>
-          <div className="relative group">
-            {uploading && (
-              <div 
-                className="absolute -inset-1 rounded-2xl border-2 border-green-500/50 animate-pulse pointer-events-none z-10"
-                style={{ opacity: Math.max(0.3, overallProgress / 100) }}
-              />
-            )}
-            <input 
-              type="file" 
-              accept="video/*"
-              className="hidden"
-              id="file-upload"
-              onChange={handleFileChange}
-              disabled={uploading}
-            />
-            <label 
-              htmlFor="file-upload" 
-              className={`relative flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-colors cursor-pointer ${file ? 'border-gold bg-gold/5 text-gold' : 'border-gray-700 hover:border-gray-500 text-gray-500'} ${error ? 'border-red-500 bg-red-500/5 text-red-500' : ''}`}
-            >
-              {file ? <CheckCircle2 size={20} /> : <Upload size={20} />}
-              <span className="text-sm font-bold truncate max-w-[200px]">
-                {file ? file.name : (error ? 'File too large' : 'Select movie file from device')}
-              </span>
-              
+        {/* File Selection - Single or Pack */}
+        {uploadType === 'single' ? (
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Movie File (Direct Uplift)</label>
+            <div className="relative group">
               {uploading && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-end">
-                  <span className="text-green-500 font-black text-sm leading-none">{overallProgress}%</span>
-                  <span className="text-[7px] text-green-500 font-black uppercase tracking-tighter">OVERALL</span>
-                </div>
+                <div 
+                  className="absolute -inset-1 rounded-2xl border-2 border-green-500/50 animate-pulse pointer-events-none z-10"
+                  style={{ opacity: Math.max(0.3, overallProgress / 100) }}
+                />
               )}
-            </label>
-          </div>
-        </div>
-
-        {/* Custom Video Cover Section */}
-        <div className="flex flex-col gap-3 p-4 bg-[#1e1e1e] rounded-2xl border border-gray-800">
-          <div className="flex justify-between items-center">
-            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Video Cover / Thumbnail</label>
-            <div className="flex bg-black/40 rounded-lg p-1">
-              <button 
-                type="button"
-                onClick={() => setCoverMode('upload')}
-                className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${coverMode === 'upload' ? 'bg-gold text-black' : 'text-gray-500'}`}
-              >UPLOAD</button>
-              <button 
-                type="button"
-                onClick={() => setCoverMode('frame')}
-                disabled={!file}
-                className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${coverMode === 'frame' ? 'bg-gold text-black' : 'text-gray-500 disabled:opacity-30'}`}
-              >SELECT FRAME</button>
-            </div>
-          </div>
-
-          <div className="flex gap-4 items-start">
-            <div className="w-32 aspect-video bg-black rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center relative">
-              {coverPreview ? (
-                <img src={coverPreview} className="w-full h-full object-cover" alt="Cover Preview" />
-              ) : (
-                <ImageIcon className="text-gray-700" size={24} />
-              )}
-            </div>
-            
-            <div className="flex-1 flex flex-col gap-2">
-              {coverMode === 'upload' ? (
-                <>
-                  <p className="text-[10px] text-gray-500">Upload a custom high-quality JPG/PNG cover image (Max 5MB).</p>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    id="cover-upload" 
-                    onChange={handleCoverChange}
-                    disabled={uploading}
-                  />
-                  <label 
-                    htmlFor="cover-upload"
-                    className="bg-[#252525] text-gray-300 text-xs font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-[#333] transition-all text-center"
-                  >
-                    CHOOSE IMAGE
-                  </label>
-                </>
-              ) : (
-                <>
-                  <p className="text-[10px] text-gray-500">Seek through the video and capture the perfect frame.</p>
-                  <button 
-                    type="button"
-                    onClick={captureFrame}
-                    className="bg-gold/10 text-gold text-xs font-bold py-2 px-4 rounded-lg hover:bg-gold/20 transition-all text-center border border-gold/20"
-                  >
-                    CAPTURE CURRENT FRAME
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {coverMode === 'frame' && videoUrl && (
-            <div className="mt-2 flex flex-col gap-2">
-              <video 
-                ref={videoRef}
-                src={videoUrl}
-                className="w-full rounded-xl border border-gray-800 bg-black max-h-[200px]"
-                controls
-                onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
+              <input 
+                type="file" 
+                accept="video/*"
+                className="hidden"
+                id="file-upload"
+                onChange={handleFileChange}
+                disabled={uploading}
               />
-              <canvas ref={canvasRef} className="hidden" />
+              <label 
+                htmlFor="file-upload" 
+                className={`relative flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-colors cursor-pointer ${file ? 'border-gold bg-gold/5 text-gold' : 'border-gray-700 hover:border-gray-500 text-gray-500'} ${error ? 'border-red-500 bg-red-500/5 text-red-500' : ''}`}
+              >
+                {file ? <CheckCircle2 size={20} /> : <Upload size={20} />}
+                <span className="text-sm font-bold truncate max-w-[200px]">
+                  {file ? file.name : (error ? 'File too large' : 'Select movie file from device')}
+                </span>
+                
+                {uploading && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-end">
+                    <span className="text-green-500 font-black text-sm leading-none">{overallProgress}%</span>
+                    <span className="text-[7px] text-green-500 font-black uppercase tracking-tighter">OVERALL</span>
+                  </div>
+                )}
+              </label>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              Movie Files (Bulk Upload)
+            </label>
+            <div className="relative group">
+              <input 
+                type="file" 
+                accept="video/*"
+                multiple
+                className="hidden"
+                id="files-upload"
+                onChange={handleFileChange}
+                disabled={uploading}
+              />
+              <label 
+                htmlFor="files-upload" 
+                className={`relative flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-colors cursor-pointer ${files.length > 0 ? 'border-gold bg-gold/5 text-gold' : 'border-gray-700 hover:border-gray-500 text-gray-500'} ${error ? 'border-red-500 bg-red-500/5 text-red-500' : ''}`}
+              >
+                {files.length > 0 ? <CheckCircle2 size={20} /> : <Upload size={20} />}
+                <span className="text-sm font-bold truncate max-w-[200px]">
+                  {files.length > 0 
+                    ? `${files.length} file${files.length > 1 ? 's' : ''} selected` 
+                    : (error || 'Select multiple movie files')}
+                </span>
+              </label>
+            </div>
 
-        {uploading && (
+            {/* Upload Queue */}
+            {uploadQueue.length > 0 && (
+              <div className="mt-4 flex flex-col gap-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-gray-400">Upload Queue</span>
+                  {uploading && (
+                    <span className="text-xs font-bold text-gold">{totalProgress}% Complete</span>
+                  )}
+                </div>
+                {uploadQueue.map((item, index) => (
+                  <div 
+                    key={item.id}
+                    className={`p-3 rounded-xl border flex flex-col gap-2 transition-all ${
+                      item.status === 'uploading' 
+                        ? 'bg-gold/10 border-gold/50' 
+                        : item.status === 'completed'
+                        ? 'bg-green-500/10 border-green-500/50'
+                        : item.status === 'error'
+                        ? 'bg-red-500/10 border-red-500/50'
+                        : 'bg-[#1e1e1e] border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {item.status === 'waiting' && <Clock size={16} className="text-gray-400" />}
+                        {item.status === 'uploading' && <Loader2 size={16} className="text-gold animate-spin" />}
+                        {item.status === 'completed' && <CheckCircle2 size={16} className="text-green-500" />}
+                        {item.status === 'error' && <AlertCircle size={16} className="text-red-500" />}
+                        <span className="text-xs font-bold truncate max-w-[200px]">
+                          {item.title}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-gray-500">
+                        {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                      </span>
+                    </div>
+                    
+                    {item.status === 'uploading' && (
+                      <div className="w-full bg-gray-800 rounded-full h-1.5">
+                        <div 
+                          className="bg-gold h-1.5 rounded-full transition-all"
+                          style={{ width: `${item.progress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {uploadType === 'single' && (
+          /* Custom Video Cover Section */
+          <div className="flex flex-col gap-3 p-4 bg-[#1e1e1e] rounded-2xl border border-gray-800">
+            <div className="flex justify-between items-center">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Video Cover / Thumbnail</label>
+              <div className="flex bg-black/40 rounded-lg p-1">
+                <button 
+                  type="button"
+                  onClick={() => setCoverMode('upload')}
+                  className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${coverMode === 'upload' ? 'bg-gold text-black' : 'text-gray-500'}`}
+                >UPLOAD</button>
+                <button 
+                  type="button"
+                  onClick={() => setCoverMode('frame')}
+                  disabled={!file}
+                  className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${coverMode === 'frame' ? 'bg-gold text-black' : 'text-gray-500 disabled:opacity-30'}`}
+                >SELECT FRAME</button>
+              </div>
+            </div>
+
+            <div className="flex gap-4 items-start">
+              <div className="w-32 aspect-video bg-black rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center relative">
+                {coverPreview ? (
+                  <img src={coverPreview} className="w-full h-full object-cover" alt="Cover Preview" />
+                ) : (
+                  <ImageIcon className="text-gray-700" size={24} />
+                )}
+              </div>
+              
+              <div className="flex-1 flex flex-col gap-2">
+                {coverMode === 'upload' ? (
+                  <>
+                    <p className="text-[10px] text-gray-500">Upload a custom high-quality JPG/PNG cover image (Max 5MB).</p>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      id="cover-upload" 
+                      onChange={handleCoverChange}
+                      disabled={uploading}
+                    />
+                    <label 
+                      htmlFor="cover-upload"
+                      className="bg-[#252525] text-gray-300 text-xs font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-[#333] transition-all text-center"
+                    >
+                      CHOOSE IMAGE
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[10px] text-gray-500">Seek through the video and capture the perfect frame.</p>
+                    <button 
+                      type="button"
+                      onClick={captureFrame}
+                      className="bg-gold/10 text-gold text-xs font-bold py-2 px-4 rounded-lg hover:bg-gold/20 transition-all text-center border border-gold/20"
+                    >
+                      CAPTURE CURRENT FRAME
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {coverMode === 'frame' && videoUrl && (
+              <div className="mt-2 flex flex-col gap-2">
+                <video 
+                  ref={videoRef}
+                  src={videoUrl}
+                  className="w-full rounded-xl border border-gray-800 bg-black max-h-[200px]"
+                  controls
+                  onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
+                />
+                <canvas ref={canvasRef} className="hidden" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Single Upload Progress */}
+        {uploading && uploadType === 'single' && (
           <div className="flex flex-col gap-2 mt-2">
             <div className="flex justify-between text-[10px] font-black text-gold uppercase tracking-tighter">
               <span>{progress < 100 ? `Step 1: Uplink (${progress}%)` : `Step 2: Syncing (${cloudProgress}%)`}</span>
@@ -1360,9 +1611,20 @@ const UploadScreen = ({ user }) => {
         <button 
           type="submit"
           className={`bg-gold text-black font-black py-4 rounded-xl mt-4 shadow-lg shadow-gold/20 active:scale-95 transition-all ${uploading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'}`}
-          disabled={uploading || !file}
+          disabled={
+            uploading || 
+            (uploadType === 'single' && !file) || 
+            (uploadType === 'pack' && uploadQueue.length === 0)
+          }
         >
-          {uploading ? 'UPLIFTING...' : 'PUBLISH MOVIE'}
+          {uploading 
+            ? (uploadType === 'pack' 
+                ? `UPLOADING ${currentUploadIndex + 1}/${uploadQueue.length}...` 
+                : 'UPLIFTING...')
+            : (uploadType === 'pack' 
+                ? `PUBLISH PACK (${uploadQueue.length} ${uploadQueue.length === 1 ? 'movie' : 'movies'})`
+                : 'PUBLISH MOVIE')
+          }
         </button>
       </form>
     </div>
@@ -1373,8 +1635,9 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
   const { djName } = useParams();
   const [dj, setDj] = useState(null);
   const [movies, setMovies] = useState([]);
+  const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('movies'); // 'movies', 'playlists', 'popular', 'latest'
+  const [activeTab, setActiveTab] = useState('movies'); // 'movies', 'packs', 'popular', 'latest'
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -1385,9 +1648,15 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
         const djResponse = await axios.get(`${API_BASE_URL}/djs/name/${encodeURIComponent(djName)}`);
         setDj(djResponse.data);
         
-        const sort = activeTab === 'popular' ? 'popular' : 'latest';
-        const moviesResponse = await axios.get(`${API_BASE_URL}/djs/${djResponse.data.id}/movies?sort=${sort}`);
-        setMovies(Array.isArray(moviesResponse.data) ? moviesResponse.data : []);
+        if (activeTab === 'movies' || activeTab === 'popular' || activeTab === 'latest') {
+          const sort = activeTab === 'popular' ? 'popular' : 'latest';
+          const moviesResponse = await axios.get(`${API_BASE_URL}/djs/${djResponse.data.id}/movies?sort=${sort}`);
+          setMovies(Array.isArray(moviesResponse.data) ? moviesResponse.data : []);
+        } else if (activeTab === 'packs') {
+          // Fetch packs/series for this DJ
+          const packsResponse = await axios.get(`${API_BASE_URL}/series/user/1`); // Placeholder user ID
+          setPacks(Array.isArray(packsResponse.data) ? packsResponse.data : []);
+        }
       } catch (err) {
         console.error("Failed to fetch DJ profile:", err);
       } finally {
@@ -1447,7 +1716,7 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
         <div className="flex gap-1 px-4 py-3 overflow-x-auto no-scrollbar">
           {[
             { id: 'movies', label: 'Movies' },
-            { id: 'playlists', label: 'Playlists' },
+            { id: 'packs', label: 'Packs' },
             { id: 'popular', label: 'Popular' },
             { id: 'latest', label: 'Latest' }
           ].map(tab => (
@@ -1468,30 +1737,67 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
       
       {/* Content */}
       <div className="px-4 py-6">
-        {movies.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {movies.map(movie => (
-              <div 
-                key={movie.id} 
-                className="flex flex-col gap-2 cursor-pointer"
-                onClick={() => onMovieClick(movie)}
-              >
-                <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-900">
-                  <img 
-                    src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`}
-                    alt={movie.title}
-                    className="w-full h-full object-cover"
-                  />
+        {activeTab === 'packs' ? (
+          packs.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {packs.map(pack => (
+                <div 
+                  key={pack.id} 
+                  className="flex flex-col gap-2 cursor-pointer group"
+                >
+                  <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-900 relative">
+                    <img 
+                      src={pack.thumbnail_telegram_file_id ? `${API_BASE_URL}/thumbnail/${pack.thumbnail_telegram_file_id}` : `https://picsum.photos/seed/${pack.id}/300/450`}
+                      alt={pack.title}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-all"
+                    />
+                    <div className="absolute top-2 right-2 bg-gold text-black text-[10px] font-bold px-2 py-1 rounded-full">
+                      [{pack.movie_count} packed]
+                    </div>
+                  </div>
+                  <p className="text-xs font-bold text-white truncate">{pack.title}</p>
+                  {pack.description && (
+                    <p className="text-[10px] text-gray-500 truncate">{pack.description}</p>
+                  )}
                 </div>
-                <p className="text-xs font-bold text-white truncate">{movie.title}</p>
-                <p className="text-[10px] text-gray-500">{movie.views} views</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-500">No packs yet</p>
+            </div>
+          )
         ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No movies yet</p>
-          </div>
+          movies.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {movies.map(movie => (
+                <div 
+                  key={movie.id} 
+                  className="flex flex-col gap-2 cursor-pointer"
+                  onClick={() => onMovieClick(movie)}
+                >
+                  <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-900 relative">
+                    <img 
+                      src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`}
+                      alt={movie.title}
+                      className="w-full h-full object-cover"
+                    />
+                    {movie.series_titles && movie.series_titles.length > 0 && (
+                      <div className="absolute top-2 right-2 bg-gold text-black text-[8px] font-bold px-2 py-1 rounded-full">
+                        [Pack]
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-white truncate">{movie.title}</p>
+                  <p className="text-[10px] text-gray-500">{movie.views} views</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-500">No movies yet</p>
+            </div>
+          )
         )}
       </div>
     </div>

@@ -716,7 +716,7 @@ apiRouter.get('/djs/:djId/movies', async (req, res) => {
     const djName = djResult.rows[0].name;
     
     let query = `
-      SELECT m.*, t.telegram_file_id,
+      SELECT DISTINCT ON (m.id) m.*, t.telegram_file_id,
         (SELECT array_agg(s.title) 
          FROM series_movies sm 
          JOIN series s ON sm.series_id = s.id 
@@ -728,9 +728,9 @@ apiRouter.get('/djs/:djId/movies', async (req, res) => {
     const params = [djName];
     
     if (sort === 'popular') {
-      query += ' ORDER BY m.views DESC';
+      query += ' ORDER BY m.id, m.views DESC';
     } else {
-      query += ' ORDER BY m.created_at DESC';
+      query += ' ORDER BY m.id, m.created_at DESC';
     }
     
     const result = await db.query(query, params);
@@ -754,7 +754,7 @@ apiRouter.get('/upload', (req, res) => {
 apiRouter.get('/movies', async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id ORDER BY m.created_at DESC'
+            'SELECT DISTINCT ON (m.id) m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id ORDER BY m.id, m.created_at DESC'
         );
         res.json(result.rows);
     } catch (error) {
@@ -767,7 +767,7 @@ apiRouter.get('/movies', async (req, res) => {
 apiRouter.get('/movies/publisher/:name', async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id WHERE m.publisher_name = $1 ORDER BY m.created_at DESC', [req.params.name]
+            'SELECT DISTINCT ON (m.id) m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id WHERE m.publisher_name = $1 ORDER BY m.id, m.created_at DESC', [req.params.name]
         );
         res.json(result.rows);
     } catch (error) {
