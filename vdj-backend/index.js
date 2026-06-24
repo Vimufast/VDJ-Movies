@@ -738,6 +738,38 @@ apiRouter.get('/series/user/:userId', async (req, res) => {
   }
 });
 
+// Get all series (packs)
+apiRouter.get('/series', async (req, res) => {
+  try {
+    const result = await db.query('SELECT * FROM series ORDER BY updated_at DESC');
+    
+    // For each series, get movie count and thumbnail
+    const seriesWithDetails = await Promise.all(result.rows.map(async (series) => {
+      const movieCountResult = await db.query('SELECT COUNT(*) as count FROM series_movies WHERE series_id = $1', [series.id]);
+      const thumbnailResult = await db.query(`
+        SELECT t.telegram_file_id 
+        FROM series_movies sm
+        JOIN movies m ON sm.movie_id = m.id
+        LEFT JOIN thumbnails t ON m.id = t.movie_id
+        WHERE sm.series_id = $1
+        ORDER BY sm.order_in_series ASC
+        LIMIT 1
+      `, [series.id]);
+      
+      return {
+        ...series,
+        movie_count: parseInt(movieCountResult.rows[0].count),
+        thumbnail_telegram_file_id: thumbnailResult.rows[0]?.telegram_file_id
+      };
+    }));
+    
+    res.json(seriesWithDetails);
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] GET_ALL_SERIES_ERROR:`, error);
+    res.status(500).json({ error: 'Database error', details: error.message });
+  }
+});
+
 // Get series by ID with movies
 apiRouter.get('/series/:seriesId', async (req, res) => {
   const { seriesId } = req.params;
@@ -763,6 +795,36 @@ apiRouter.get('/series/:seriesId', async (req, res) => {
     });
   } catch (error) {
     console.error(`[${new Date().toISOString()}] GET_SERIES_ERROR:`, error);
+    res.status(500).json({ error: 'Database error', details: error.message });
+  }
+});
+
+// Update series (pack)
+apiRouter.put('/series/:seriesId', async (req, res) => {
+  const { seriesId } = req.params;
+  const { title, description, user_id } = req.body;
+  
+  try {
+    // Check if series exists
+    const seriesCheck = await db.query('SELECT * FROM series WHERE id = $1', [seriesId]);
+    if (seriesCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Series not found' });
+    }
+    
+    // Verify user owns the series
+    if (user_id && seriesCheck.rows[0].user_id !== user_id) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this pack' });
+    }
+    
+    // Update series
+    const result = await db.query(
+      'UPDATE series SET title = $1, description = $2, updated_at = NOW() WHERE id = $3 RETURNING *',
+      [title || seriesCheck.rows[0].title, description, seriesId]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] UPDATE_SERIES_ERROR:`, error);
     res.status(500).json({ error: 'Database error', details: error.message });
   }
 });
@@ -820,7 +882,14 @@ apiRouter.get('/upload', (req, res) => {
 apiRouter.get('/movies', async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT DISTINCT ON (m.id) m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id ORDER BY m.id, m.created_at DESC'
+            `SELECT DISTINCT ON (m.id) m.*, t.telegram_file_id,
+              (SELECT array_agg(s.title) 
+               FROM series_movies sm 
+               JOIN series s ON sm.series_id = s.id 
+               WHERE sm.movie_id = m.id) as series_titles
+            FROM movies m 
+            LEFT JOIN thumbnails t ON m.id = t.movie_id 
+            ORDER BY m.id, m.created_at DESC`
         );
         res.json(result.rows);
     } catch (error) {
@@ -833,7 +902,15 @@ apiRouter.get('/movies', async (req, res) => {
 apiRouter.get('/movies/publisher/:name', async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT DISTINCT ON (m.id) m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id WHERE m.publisher_name = $1 ORDER BY m.id, m.created_at DESC', [req.params.name]
+            `SELECT DISTINCT ON (m.id) m.*, t.telegram_file_id,
+              (SELECT array_agg(s.title) 
+               FROM series_movies sm 
+               JOIN series s ON sm.series_id = s.id 
+               WHERE sm.movie_id = m.id) as series_titles
+            FROM movies m 
+            LEFT JOIN thumbnails t ON m.id = t.movie_id 
+            WHERE m.publisher_name = $1 
+            ORDER BY m.id, m.created_at DESC`, [req.params.name]
         );
         res.json(result.rows);
     } catch (error) {

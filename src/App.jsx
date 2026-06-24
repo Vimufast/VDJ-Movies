@@ -620,8 +620,9 @@ const DEFAULT_QUERIES = [
 ];
 
 
-const HomeScreen = ({ onMovieClick }) => {
+const HomeScreen = ({ onMovieClick, onSeriesClick }) => {
   const [movies, setMovies] = useState([]);
+  const [series, setSeries] = useState([]);
   const [suggestions, setSuggestions] = useState(DEFAULT_QUERIES);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -647,12 +648,14 @@ const HomeScreen = ({ onMovieClick }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [moviesRes, suggestionsRes] = await Promise.all([
+        const [moviesRes, seriesRes, suggestionsRes] = await Promise.all([
           axios.get(`${API_BASE_URL}/movies`),
+          axios.get(`${API_BASE_URL}/series`),
           axios.get(`${API_BASE_URL}/suggestions`)
         ]);
         
         setMovies(Array.isArray(moviesRes.data) ? moviesRes.data : []);
+        setSeries(Array.isArray(seriesRes.data) ? seriesRes.data : []);
         
         if (Array.isArray(suggestionsRes.data) && suggestionsRes.data.length > 0) {
           setSuggestions(suggestionsRes.data);
@@ -660,6 +663,7 @@ const HomeScreen = ({ onMovieClick }) => {
       } catch (error) {
         console.error('Failed to fetch data:', error);
         setMovies([]); 
+        setSeries([]);
       } finally {
         setLoading(false);
       }
@@ -852,6 +856,40 @@ const HomeScreen = ({ onMovieClick }) => {
             </div>
           ) : (
             <>
+              {series.length > 0 && (
+                <div className="flex flex-col gap-3 py-4">
+                  <div className="flex items-center justify-between px-4">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      Packs
+                    </h2>
+                    <ChevronRight size={20} className="text-gray-500" />
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto px-4 no-scrollbar scroll-smooth">
+                    {series.map(s => (
+                      <div
+                        key={s.id}
+                        className="flex-shrink-0 w-32 md:w-44 aspect-[2/3] bg-gray-900 rounded-md overflow-hidden relative group cursor-pointer"
+                        onClick={() => onSeriesClick(s)}
+                      >
+                        <img
+                          src={s.thumbnail_telegram_file_id ? `${API_BASE_URL}/thumbnail/${s.thumbnail_telegram_file_id}` : `https://picsum.photos/seed/${s.id}/300/450`}
+                          alt={s.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        <div className="absolute top-2 right-2 bg-gold text-black text-[8px] font-bold px-2 py-1 rounded-full">
+                          {s.movie_count} movies
+                        </div>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Play fill="white" size={32} />
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black to-transparent">
+                          <p className="text-[10px] font-bold truncate">{s.title}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <GenreRow title="Action" movies={getMoviesByGenre('Action')} onMovieClick={onMovieClick} />
               <GenreRow title="Kihindi" movies={getMoviesByGenre('Kihindi')} onMovieClick={onMovieClick} />
               <GenreRow title="Comedy" movies={getMoviesByGenre('Comedy')} onMovieClick={onMovieClick} />
@@ -1631,7 +1669,7 @@ const UploadScreen = ({ user }) => {
   );
 };
 
-const DJProfileScreen = ({ user, onMovieClick }) => {
+const DJProfileScreen = ({ user, onMovieClick, onSeriesClick }) => {
   const { djName } = useParams();
   const [dj, setDj] = useState(null);
   const [movies, setMovies] = useState([]);
@@ -1746,6 +1784,7 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
                 <div 
                   key={pack.id} 
                   className="flex flex-col gap-2 cursor-pointer group"
+                  onClick={() => onSeriesClick(pack)}
                 >
                   <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-900 relative">
                     <img 
@@ -1755,6 +1794,9 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
                     />
                     <div className="absolute top-2 right-2 bg-gold text-black text-[10px] font-bold px-2 py-1 rounded-full">
                       [{pack.movie_count} packed]
+                    </div>
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Play fill="white" size={32} />
                     </div>
                   </div>
                   <p className="text-xs font-bold text-white truncate">{pack.title}</p>
@@ -1806,7 +1848,7 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
   );
 };
 
-const ProfileScreen = ({ user, onMovieClick }) => {
+const ProfileScreen = ({ user, onMovieClick, onSeriesClick }) => {
   const [userMovies, setUserMovies] = useState([]);
   const [userSeries, setUserSeries] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -2008,6 +2050,7 @@ const ProfileScreen = ({ user, onMovieClick }) => {
                   <div 
                     key={series.id} 
                     className="flex flex-col gap-2 cursor-pointer group"
+                    onClick={() => onSeriesClick(series)}
                   >
                     <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-900 relative">
                       <img 
@@ -2018,11 +2061,8 @@ const ProfileScreen = ({ user, onMovieClick }) => {
                       <div className="absolute top-2 right-2 bg-gold text-black text-[10px] font-bold px-2 py-1 rounded-full">
                         [{series.movie_count} packed]
                       </div>
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                        <button className="flex items-center gap-1 text-white text-[10px] font-bold">
-                          <Play size={10} fill="currentColor" />
-                          Add to Pack
-                        </button>
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Play fill="white" size={32} />
                       </div>
                     </div>
                     <p className="text-xs font-bold text-white truncate">{series.title}</p>
@@ -2079,6 +2119,118 @@ const ProfileScreen = ({ user, onMovieClick }) => {
   );
 };
 
+const SeriesDetailScreen = ({ series, onMovieClick, user, onBack }) => {
+  const [seriesData, setSeriesData] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchSeries = async () => {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/series/${series.id}`);
+        setSeriesData(response.data);
+        setEditTitle(response.data.title);
+        setEditDescription(response.data.description || '');
+      } catch (error) {
+        console.error('Failed to fetch series:', error);
+      }
+    };
+    fetchSeries();
+  }, [series.id]);
+
+  const handleSave = async () => {
+    try {
+      await axios.put(`${API_BASE_URL}/series/${series.id}`, {
+        title: editTitle,
+        description: editDescription,
+        user_id: user?.id
+      });
+      setSeriesData(prev => ({ ...prev, title: editTitle, description: editDescription }));
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Failed to update series:', error);
+    }
+  };
+
+  if (!seriesData) return <LoadingScreen />;
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] pb-20">
+      <div className="px-4 pt-10">
+        <button onClick={onBack} className="flex items-center gap-2 text-gray-400 hover:text-white mb-6">
+          <ChevronRight className="rotate-180" size={20} />
+          Back
+        </button>
+        <div className="mb-6">
+          {isEditing ? (
+            <div className="flex flex-col gap-3">
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="bg-[#1e1e1e] border border-[#333] rounded-xl p-3 text-white font-bold text-2xl"
+              />
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="bg-[#1e1e1e] border border-[#333] rounded-xl p-3 text-gray-300 resize-none"
+                rows={3}
+              />
+              <div className="flex gap-3">
+                <button onClick={handleSave} className="bg-gold text-black font-bold py-2 px-6 rounded-xl">
+                  Save
+                </button>
+                <button onClick={() => setIsEditing(false)} className="bg-[#333] text-white font-bold py-2 px-6 rounded-xl">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between">
+                <h1 className="text-3xl font-bold text-white">{seriesData.title}</h1>
+                {user && seriesData.user_id === user.id && (
+                  <button onClick={() => setIsEditing(true)} className="text-gold font-bold text-sm">
+                    Edit
+                  </button>
+                )}
+              </div>
+              {seriesData.description && (
+                <p className="text-gray-400 mt-2">{seriesData.description}</p>
+              )}
+              <p className="text-gray-500 text-sm mt-1">{seriesData.movies?.length || 0} movies</p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-4">
+          {seriesData.movies?.map((movie, index) => (
+            <div
+              key={movie.id}
+              className="flex gap-4 bg-[#121212] p-4 rounded-2xl border border-white/5 active:bg-[#1a1a1a] cursor-pointer"
+              onClick={() => onMovieClick(movie)}
+            >
+              <div className="text-4xl font-bold text-gold opacity-50">{index + 1}</div>
+              <div className="w-24 h-14 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0">
+                <img
+                  src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || `https://picsum.photos/seed/${movie.id}/120/68`}
+                  alt={movie.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-white font-bold truncate">{movie.title}</h3>
+                <p className="text-gray-500 text-sm">{movie.dj_name}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- App Root ---
 
 const App = () => {
@@ -2088,6 +2240,7 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [isSideNavOpen, setIsSideNavOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Add isLoading state
+  const [selectedSeries, setSelectedSeries] = useState(null);
 
   useEffect(() => {
     // Simulate initial app loading
@@ -2136,16 +2289,20 @@ const App = () => {
   }, []);
 
   const handleMovieClick = (movie) => {
-    setSelectedMovie(movie);
-    setIsSheetOpen(true);
-  };
+  setSelectedMovie(movie);
+  setIsSheetOpen(true);
+};
 
-  const handlePlayMovie = (movie) => {
-    // Logic for Reward Ad would go here
-    console.log("Triggering Rewarded Ad for movie:", movie.title);
-    setIsSheetOpen(false);
-    setPlayingMovie(movie);
-  };
+const handleSeriesClick = (series) => {
+  setSelectedSeries(series);
+};
+
+const handlePlayMovie = (movie) => {
+  // Logic for Reward Ad would go here
+  console.log("Triggering Rewarded Ad for movie:", movie.title);
+  setIsSheetOpen(false);
+  setPlayingMovie(movie);
+};
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -2180,13 +2337,46 @@ const App = () => {
 
       <main className="flex-1 overflow-y-auto relative z-10">
         <Routes>
-          <Route path="/" element={<HomeScreen onMovieClick={handleMovieClick} />} />
+          <Route path="/" element={
+            selectedSeries ? (
+              <SeriesDetailScreen 
+                series={selectedSeries} 
+                onMovieClick={handleMovieClick} 
+                user={user} 
+                onBack={() => setSelectedSeries(null)}
+              />
+            ) : (
+              <HomeScreen onMovieClick={handleMovieClick} onSeriesClick={handleSeriesClick} />
+            )
+          } />
           <Route path="/library" element={<LibraryScreen />} />
           <Route path="/upload" element={<UploadScreen user={user} />} />
-          <Route path="/profile" element={<ProfileScreen user={user} onMovieClick={handleMovieClick} />} />
+          <Route path="/profile" element={
+            selectedSeries ? (
+              <SeriesDetailScreen 
+                series={selectedSeries} 
+                onMovieClick={handleMovieClick} 
+                user={user} 
+                onBack={() => setSelectedSeries(null)}
+              />
+            ) : (
+              <ProfileScreen user={user} onMovieClick={handleMovieClick} onSeriesClick={handleSeriesClick} />
+            )
+          } />
           <Route 
             path="/dj/:djName" 
-            element={<DJProfileScreen user={user} onMovieClick={handleMovieClick} />} 
+            element={
+              selectedSeries ? (
+                <SeriesDetailScreen 
+                  series={selectedSeries} 
+                  onMovieClick={handleMovieClick} 
+                  user={user} 
+                  onBack={() => setSelectedSeries(null)}
+                />
+              ) : (
+                <DJProfileScreen user={user} onMovieClick={handleMovieClick} onSeriesClick={handleSeriesClick} />
+              )
+            } 
           />
         </Routes>
       </main>
