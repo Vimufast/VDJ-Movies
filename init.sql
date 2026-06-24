@@ -44,10 +44,24 @@ CREATE TABLE IF NOT EXISTS djs (
   id SERIAL PRIMARY KEY,
   name text NOT NULL UNIQUE,
   manager_user_id integer,
-  status text DEFAULT 'open'::text,
+  status text DEFAULT 'open'::text, -- 'open', 'moderated', 'restricted'
   created_at timestamp with time zone DEFAULT NOW(),
   updated_at timestamp with time zone DEFAULT NOW(),
   CONSTRAINT djs_manager_user_id_fkey FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS dj_verifications (
+  id SERIAL PRIMARY KEY,
+  dj_id integer NOT NULL,
+  manager_user_id integer NOT NULL,
+  passport_photo_telegram_file_id integer,
+  license_telegram_file_id integer,
+  national_id_telegram_file_id integer,
+  verification_status text DEFAULT 'pending'::text, -- 'pending', 'approved', 'rejected'
+  created_at timestamp with time zone DEFAULT NOW(),
+  updated_at timestamp with time zone DEFAULT NOW(),
+  CONSTRAINT dj_verifications_dj_id_fkey FOREIGN KEY (dj_id) REFERENCES djs(id) ON DELETE CASCADE,
+  CONSTRAINT dj_verifications_manager_user_id_fkey FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS reports (
   id SERIAL PRIMARY KEY,

@@ -330,6 +330,7 @@ const VideoPlayer = ({ movie, onClose, user }) => {
 };
 
 const MovieBottomSheet = ({ movie, isOpen, onClose, onPlay }) => {
+  const navigate = useNavigate();
   if (!isOpen || !movie) return null;
 
   return (
@@ -369,7 +370,16 @@ const MovieBottomSheet = ({ movie, isOpen, onClose, onPlay }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 pb-6 -mt-8 relative z-10">
           <h2 className="text-2xl font-black text-white leading-tight mb-1">
-            {movie.title} – {movie.dj_name}
+            {movie.title} – <button 
+              className="text-gold hover:text-gold/80 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+                navigate(`/dj/${encodeURIComponent(movie.dj_name)}`);
+              }}
+            >
+              {movie.dj_name}
+            </button>
           </h2>
           
           <div className="flex items-center gap-3 text-xs font-bold text-gray-400 mb-4">
@@ -385,7 +395,16 @@ const MovieBottomSheet = ({ movie, isOpen, onClose, onPlay }) => {
             <br />
             <div className="flex flex-col gap-1 mt-4">
               <span className="text-[10px] text-gray-500 uppercase font-bold flex items-center gap-1">
-                Narrator: <span className="text-gray-300">{movie.dj_name}</span>
+                Narrator: <button 
+                  className="text-gray-300 hover:text-gold transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                    navigate(`/dj/${encodeURIComponent(movie.dj_name)}`);
+                  }}
+                >
+                  {movie.dj_name}
+                </button>
               </span>
               <span className="text-[10px] text-gray-500 uppercase font-bold flex items-center gap-1">
                 VDJ Publisher: <span className="text-gold">{movie.publisher_name || 'Anonymous'}</span>
@@ -488,25 +507,39 @@ const Navigation = ({ isDesktopOpen, setIsDesktopOpen }) => {
   );
 };
 
-const MovieCard = ({ movie, onClick }) => (
-  <div 
-    className="flex-shrink-0 w-32 md:w-44 aspect-[2/3] bg-gray-900 rounded-md overflow-hidden relative group movie-card cursor-pointer"
-    onClick={() => onClick(movie)}
-  >
-    <img 
-      src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`} 
-      alt={movie.title}
-      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-    />
-    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-      <Play fill="white" size={32} />
+const MovieCard = ({ movie, onClick, onDJClick }) => {
+  const navigate = useNavigate();
+  
+  return (
+    <div 
+      className="flex-shrink-0 w-32 md:w-44 aspect-[2/3] bg-gray-900 rounded-md overflow-hidden relative group movie-card cursor-pointer"
+      onClick={() => onClick(movie)}
+    >
+      <img 
+        src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`} 
+        alt={movie.title}
+        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+      />
+      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+        <Play fill="white" size={32} />
+      </div>
+      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black to-transparent">
+        <p className="text-[10px] font-bold truncate">{movie.title}</p>
+        {movie.dj_name && (
+          <button 
+            className="text-[8px] text-gold hover:text-gold/80 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/dj/${encodeURIComponent(movie.dj_name)}`);
+            }}
+          >
+            {movie.dj_name}
+          </button>
+        )}
+      </div>
     </div>
-    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black to-transparent">
-      <p className="text-[10px] font-bold truncate">{movie.title}</p>
-      <p className="text-[8px] text-gray-300">{movie.dj_name}</p>
-    </div>
-  </div>
-);
+  );
+};
 
 const GenreRow = ({ title, movies, onMovieClick }) => (
   <div className="flex flex-col gap-3 py-4">
@@ -1220,6 +1253,135 @@ const UploadScreen = ({ user }) => {
   );
 };
 
+const DJProfileScreen = ({ user, onMovieClick }) => {
+  const { djName } = useParams();
+  const [dj, setDj] = useState(null);
+  const [movies, setMovies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('movies'); // 'movies', 'playlists', 'popular', 'latest'
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchDJProfile = async () => {
+      if (!djName) return;
+      
+      try {
+        const djResponse = await axios.get(`${API_BASE_URL}/djs/name/${encodeURIComponent(djName)}`);
+        setDj(djResponse.data);
+        
+        const sort = activeTab === 'popular' ? 'popular' : 'latest';
+        const moviesResponse = await axios.get(`${API_BASE_URL}/djs/${djResponse.data.id}/movies?sort=${sort}`);
+        setMovies(Array.isArray(moviesResponse.data) ? moviesResponse.data : []);
+      } catch (err) {
+        console.error("Failed to fetch DJ profile:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDJProfile();
+  }, [djName, activeTab]);
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <div className="pb-20 min-h-screen bg-[#0a0a0a]">
+      {/* Header */}
+      <div className="px-4 py-6 pt-10 bg-gradient-to-b from-gold/10 to-[#0a0a0a]">
+        <button onClick={() => navigate(-1)} className="mb-4 p-2 rounded-full bg-black/50 text-white w-fit">
+          <ChevronRight className="rotate-180" size={20} />
+        </button>
+        
+        {dj && (
+          <>
+            <h1 className="text-3xl font-black text-white mb-2">{dj.name}</h1>
+            
+            {/* Manager Info */}
+            <div className="flex items-center gap-2 mb-4">
+              {dj.manager ? (
+                <span className="text-sm text-gray-400">
+                  Managed by <span className="text-gold font-bold">{dj.manager.username}</span>
+                </span>
+              ) : (
+                <button className="text-sm text-gold font-bold border border-gold/30 px-3 py-1 rounded-full hover:bg-gold/10 transition-all">
+                  Be {dj.name}'s manager
+                </button>
+              )}
+            </div>
+            
+            {/* Stats */}
+            <div className="flex gap-6 mb-6">
+              <div className="text-center">
+                <p className="text-2xl font-black text-white">{dj.followerCount}</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wider">Followers</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-black text-white">{dj.movieCount}</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wider">Movies</p>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      
+      {/* Tabs */}
+      <div className="sticky top-0 bg-[#0a0a0a] z-10 border-b border-white/5">
+        <div className="flex gap-1 px-4 py-3 overflow-x-auto no-scrollbar">
+          {[
+            { id: 'movies', label: 'Movies' },
+            { id: 'playlists', label: 'Playlists' },
+            { id: 'popular', label: 'Popular' },
+            { id: 'latest', label: 'Latest' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                activeTab === tab.id 
+                  ? 'text-gold border-b-2 border-gold' 
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      {/* Content */}
+      <div className="px-4 py-6">
+        {movies.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {movies.map(movie => (
+              <div 
+                key={movie.id} 
+                className="flex flex-col gap-2 cursor-pointer"
+                onClick={() => onMovieClick(movie)}
+              >
+                <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-900">
+                  <img 
+                    src={movie.telegram_file_id ? `${API_BASE_URL}/thumbnail/${movie.id}` : movie.thumbnail_url || movie.thumbnail || `https://picsum.photos/seed/${movie.id}/300/450`}
+                    alt={movie.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <p className="text-xs font-bold text-white truncate">{movie.title}</p>
+                <p className="text-[10px] text-gray-500">{movie.views} views</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No movies yet</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const ProfileScreen = ({ user, onMovieClick }) => {
   const [userMovies, setUserMovies] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1513,6 +1675,10 @@ const App = () => {
           <Route path="/library" element={<LibraryScreen />} />
           <Route path="/upload" element={<UploadScreen user={user} />} />
           <Route path="/profile" element={<ProfileScreen user={user} onMovieClick={handleMovieClick} />} />
+          <Route 
+            path="/dj/:djName" 
+            element={<DJProfileScreen user={user} onMovieClick={handleMovieClick} />} 
+          />
         </Routes>
       </main>
       

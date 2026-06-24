@@ -486,6 +486,104 @@ apiRouter.get('/health', async (req, res) => {
     }
 });
 
+// --- DJ Profile Routes ---
+
+// Get DJ profile by name
+apiRouter.get('/djs/name/:djName', async (req, res) => {
+    try {
+        const djName = req.params.djName;
+        
+        // First, ensure the DJ exists in the djs table (create if not)
+        let djResult = await db.query('SELECT * FROM djs WHERE name = $1', [djName]);
+        
+        if (djResult.rows.length === 0) {
+            // Create a new DJ entry if it doesn't exist
+            await db.query('INSERT INTO djs (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [djName]);
+            djResult = await db.query('SELECT * FROM djs WHERE name = $1', [djName]);
+        }
+        
+        const dj = djResult.rows[0];
+        
+        // Get manager info
+        let manager = null;
+        if (dj.manager_user_id) {
+            const managerResult = await db.query('SELECT username FROM users WHERE id = $1', [dj.manager_user_id]);
+            if (managerResult.rows.length > 0) {
+                manager = managerResult.rows[0];
+            }
+        }
+        
+        // Get follower count
+        const followersResult = await db.query('SELECT COUNT(*) as count FROM followers WHERE followed_dj_id = $1', [dj.id]);
+        const followerCount = parseInt(followersResult.rows[0].count);
+        
+        // Get movie count
+        const moviesResult = await db.query('SELECT COUNT(*) as count FROM movies WHERE dj_name = $1', [djName]);
+        const movieCount = parseInt(moviesResult.rows[0].count);
+        
+        res.json({
+            ...dj,
+            manager,
+            followerCount,
+            movieCount
+        });
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] DJ_PROFILE_ERROR:`, error);
+        res.status(500).json({ error: 'Database error', details: error.message });
+    }
+});
+
+// Get movies for a DJ with filters
+apiRouter.get('/djs/:djId/movies', async (req, res) => {
+    try {
+        const djId = req.params.djId;
+        const { sort = 'latest' } = req.query;
+        
+        // Get DJ name
+        const djResult = await db.query('SELECT name FROM djs WHERE id = $1', [djId]);
+        if (djResult.rows.length === 0) {
+            return res.status(404).json({ error: 'DJ not found' });
+        }
+        
+        const djName = djResult.rows[0].name;
+        
+        let query = 'SELECT m.*, t.telegram_file_id FROM movies m LEFT JOIN thumbnails t ON m.id = t.movie_id WHERE m.dj_name = $1';
+        const params = [djName];
+        
+        if (sort === 'popular') {
+            query += ' ORDER BY m.views DESC';
+        } else {
+            query += ' ORDER BY m.created_at DESC';
+        }
+        
+        const result = await db.query(query, params);
+        res.json(result.rows);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] DJ_MOVIES_ERROR:`, error);
+        res.status(500).json({ error: 'Database error', details: error.message });
+    }
+});
+
+// Get all DJs
+apiRouter.get('/djs', async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT 
+                d.*,
+                u.username as manager_username,
+                (SELECT COUNT(*) FROM movies WHERE dj_name = d.name) as movie_count,
+                (SELECT COUNT(*) FROM followers WHERE followed_dj_id = d.id) as follower_count
+            FROM djs d
+            LEFT JOIN users u ON d.manager_user_id = u.id
+            ORDER BY d.name
+        `);
+        res.json(result.rows);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] DJS_LIST_ERROR:`, error);
+        res.status(500).json({ error: 'Database error', details: error.message });
+    }
+});
+
 // Friendly GET handler for /upload to prevent 404s
 apiRouter.get('/upload', (req, res) => {
     res.json({ 
