@@ -520,14 +520,6 @@ const MovieCard = ({ movie, onClick, onDJClick }) => {
         alt={movie.title}
         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
       />
-      
-      {/* Pack Badge */}
-      {movie.series_titles && movie.series_titles.length > 0 && (
-        <div className="absolute top-2 right-2 bg-gold text-black text-[8px] font-bold px-2 py-1 rounded-full">
-          [Pack]
-        </div>
-      )}
-
       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
         <Play fill="white" size={32} />
       </div>
@@ -934,30 +926,10 @@ const UploadScreen = ({ user }) => {
   const [cloudProgress, setCloudProgress] = useState(0);
   const [error, setError] = useState(null);
   const [coverMode, setCoverMode] = useState('upload'); // 'upload' or 'frame'
-  const [uploadType, setUploadType] = useState('single'); // 'single' or 'pack'
-  const [selectedSeries, setSelectedSeries] = useState(null);
-  const [userSeries, setUserSeries] = useState([]);
-  const [newSeriesTitle, setNewSeriesTitle] = useState('');
-  const [newSeriesDescription, setNewSeriesDescription] = useState('');
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
-
-  // Fetch user's series
-  useEffect(() => {
-    const fetchSeries = async () => {
-      if (!user) return;
-      try {
-        // In a real app, we'd get user ID from user object
-        // For now, let's just initialize as empty
-        setUserSeries([]);
-      } catch (err) {
-        console.error('Failed to fetch series:', err);
-      }
-    };
-    fetchSeries();
-  }, [user]);
 
   const genres = ['Action', 'Kihindi', 'Comedy', 'Horror', 'Sci-Fi'];
 
@@ -1080,94 +1052,6 @@ const UploadScreen = ({ user }) => {
   return (
     <div className="p-4 pb-20">
       <h1 className="text-2xl font-bold mb-6">Creator Content Portal</h1>
-      
-      {/* Upload Type Selector */}
-      <div className="flex bg-black/50 rounded-2xl p-1 mb-6">
-        <button
-          type="button"
-          onClick={() => setUploadType('single')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-            uploadType === 'single' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          Single
-        </button>
-        <button
-          type="button"
-          onClick={() => setUploadType('pack')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-            uploadType === 'pack' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          Pack
-        </button>
-      </div>
-
-      {/* Pack Options */}
-      {uploadType === 'pack' && (
-        <div className="flex flex-col gap-4 mb-6 p-4 bg-[#1e1e1e] rounded-2xl border border-gray-800">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-            Select or Create Pack
-          </label>
-          
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setSelectedSeries(null)}
-              className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold transition-all ${
-                !selectedSeries ? 'bg-gold/20 text-gold border border-gold/30' : 'bg-gray-800 text-gray-400'
-              }`}
-            >
-              + Create New Pack
-            </button>
-          </div>
-
-          {userSeries.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {userSeries.map(series => (
-                <button
-                  key={series.id}
-                  type="button"
-                  onClick={() => setSelectedSeries(series)}
-                  className={`p-3 rounded-xl text-left transition-all ${
-                    selectedSeries?.id === series.id
-                      ? 'bg-gold/20 border border-gold/50'
-                      : 'bg-gray-800 border border-gray-700 hover:border-gray-600'
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold text-white">{series.title}</span>
-                    <span className="text-[10px] text-gray-400">[{series.movie_count} packed]</span>
-                  </div>
-                  {series.description && (
-                    <p className="text-[10px] text-gray-500 mt-1">{series.description}</p>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {!selectedSeries && (
-            <div className="flex flex-col gap-2">
-              <input
-                type="text"
-                placeholder="Pack title"
-                value={newSeriesTitle}
-                onChange={(e) => setNewSeriesTitle(e.target.value)}
-                className="bg-[#252525] border-none rounded-xl p-3 text-sm focus:ring-1 focus:ring-gold outline-none"
-              />
-              <textarea
-                rows={2}
-                placeholder="Pack description (optional)"
-                value={newSeriesDescription}
-                onChange={(e) => setNewSeriesDescription(e.target.value)}
-                className="bg-[#252525] border-none rounded-xl p-3 text-sm focus:ring-1 focus:ring-gold resize-none outline-none"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">DJ Name</label>
@@ -1500,10 +1384,8 @@ const DJProfileScreen = ({ user, onMovieClick }) => {
 
 const ProfileScreen = ({ user, onMovieClick }) => {
   const [userMovies, setUserMovies] = useState([]);
-  const [userSeries, setUserSeries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [activeTab, setActiveTab] = useState('single'); // 'single' or 'packs'
 
   useEffect(() => {
     // Only mount CoolzTech Shared UI if user is NOT logged in
@@ -1528,20 +1410,8 @@ const ProfileScreen = ({ user, onMovieClick }) => {
     }
   };
 
-  const fetchUserSeries = async () => {
-    if (!user) return;
-    try {
-      // In a real app, we'd get user ID from user object
-      // For now, let's just initialize as empty
-      setUserSeries([]);
-    } catch (err) {
-      console.error("Failed to fetch user series:", err);
-    }
-  };
-
   useEffect(() => {
     fetchUserMovies();
-    fetchUserSeries();
   }, [user]);
 
   const handleDelete = async (e, movieId) => {
@@ -1624,32 +1494,10 @@ const ProfileScreen = ({ user, onMovieClick }) => {
               </h3>
               <Link to="/upload" className="text-[10px] font-black text-gold border-b border-gold/30 pb-0.5">NEW UPLOAD</Link>
             </div>
-
-            {/* Tabs */}
-            <div className="flex bg-black/50 rounded-2xl p-1 mb-6">
-              <button
-                type="button"
-                onClick={() => setActiveTab('single')}
-                className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                  activeTab === 'single' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Single
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('packs')}
-                className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                  activeTab === 'packs' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Packs
-              </button>
-            </div>
             
             {loading ? (
               <LoadingScreen />
-            ) : activeTab === 'single' && userMovies.length > 0 ? (
+            ) : userMovies.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {userMovies.map(movie => (
                   <div 
@@ -1691,47 +1539,16 @@ const ProfileScreen = ({ user, onMovieClick }) => {
                   </div>
                 ))}
               </div>
-            ) : activeTab === 'packs' && userSeries.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {userSeries.map(series => (
-                  <div 
-                    key={series.id} 
-                    className="flex flex-col gap-2 cursor-pointer group"
-                  >
-                    <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-900 relative">
-                      <img 
-                        src={series.thumbnail_telegram_file_id ? `${API_BASE_URL}/thumbnail/${series.thumbnail_telegram_file_id}` : `https://picsum.photos/seed/${series.id}/300/450`}
-                        alt={series.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      />
-                      <div className="absolute top-2 right-2 bg-gold text-black text-[10px] font-bold px-2 py-1 rounded-full">
-                        [{series.movie_count} packed]
-                      </div>
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                        <button className="flex items-center gap-1 text-white text-[10px] font-bold">
-                          <Play size={10} fill="currentColor" />
-                          Add to Pack
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs font-bold text-white truncate">{series.title}</p>
-                  </div>
-                ))}
-              </div>
             ) : (
               <div className="bg-[#121212] rounded-[2.5rem] p-12 text-center border border-dashed border-white/10">
                 <DownloadCloud size={48} className="mx-auto mb-4 text-gray-800" strokeWidth={1} />
-                <p className="text-sm font-black text-gray-500 uppercase tracking-tighter">
-                  {activeTab === 'single' ? 'Your library is empty' : 'No packs yet'}
-                </p>
-                <p className="text-[10px] text-gray-600 mt-1 mb-6">
-                  {activeTab === 'single' ? 'Start uploading to build your VDJ profile' : 'Create a pack by uploading multiple movies'}
-                </p>
+                <p className="text-sm font-black text-gray-500 uppercase tracking-tighter">Your library is empty</p>
+                <p className="text-[10px] text-gray-600 mt-1 mb-6">Start uploading to build your VDJ profile</p>
                 <Link 
                   to="/upload" 
                   className="bg-gold text-black text-[10px] font-black px-6 py-3 rounded-full uppercase tracking-widest hover:scale-105 active:scale-95 transition-all inline-block shadow-lg shadow-gold/20"
                 >
-                  {activeTab === 'single' ? 'Publish Now' : 'Create Pack'}
+                  Publish Now
                 </Link>
               </div>
             )}
